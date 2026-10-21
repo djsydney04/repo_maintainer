@@ -17,6 +17,7 @@ include = [
   "CONTRIBUTING.md", "SECURITY.md", "CODE_OF_CONDUCT.md",
   "docs/**",
   "renovate.example.json", "renovate-image.txt",
+  "maintainer", "scripts/run-dependencies.sh", "compose.dependencies.yml", "deploy/systemd/**",
 ]
 
 [[bin]]
