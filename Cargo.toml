@@ -11,6 +11,11 @@ homepage = "https://github.com/djsydney04/repo_maintainer"
 readme = "README.md"
 keywords = ["maintenance", "automation", "agent", "github", "rust"]
 categories = ["command-line-utilities", "development-tools"]
+include = [
+  "src/**", "tests/*.rs", "examples/**", "Cargo.toml", "Cargo.lock", "rustfmt.toml",
+  "README.md", "LICENSE", "maintainer.example.yml", "CHANGELOG.md",
+  "CONTRIBUTING.md", "SECURITY.md", "CODE_OF_CONDUCT.md",
+]
 
 [[bin]]
 name = "repo-maintainer"
