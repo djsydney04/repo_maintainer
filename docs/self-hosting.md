@@ -21,12 +21,12 @@ binary from cron, systemd, Kubernetes or an existing job system.
    Codex use `CODEX_API_KEY` (or its existing login on a dedicated worker). The
    builtin runner supports its provider-specific keys and `MAINTENANCE_API_KEY`.
 5. Copy [the self-hosted caller](../examples/self-hosted-workflow.yml) into
-   `.github/workflows/`. Replace both SHA placeholders with the same reviewed
-   maintainer commit. Match `runner_labels` to your workers.
+   `.github/workflows/`. Review the pinned maintainer commit before enabling it, and update both SHA
+   references together when upgrading. Match `runner_labels` to your workers.
 
 ```yaml
 with:
-  maintainer_ref: FULL_COMMIT_SHA
+  maintainer_ref: 64c3d4e5c76f67bc378b18cbb297a3a5ca69ee5a
   config_path: .maintainer.yml
   runner_labels: '["self-hosted", "linux", "x64", "repo-maintainer"]'
   install_codex: true

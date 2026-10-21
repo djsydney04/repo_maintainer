@@ -1,5 +1,5 @@
 # Commit a copy under .github/workflows/ in the repository you want to maintain.
-# Replace both FULL_COMMIT_SHA placeholders with the same reviewed maintainer SHA.
+# Review the pinned commit; update both full SHA references together when upgrading.
 name: Scheduled repository maintenance
 on:
   schedule:
@@ -15,9 +15,9 @@ jobs:
       pull-requests: write
       issues: write
       actions: write
-    uses: djsydney04/repo_maintainer/.github/workflows/maintain.yml@FULL_COMMIT_SHA
+    uses: djsydney04/repo_maintainer/.github/workflows/maintain.yml@64c3d4e5c76f67bc378b18cbb297a3a5ca69ee5a
     with:
-      maintainer_ref: FULL_COMMIT_SHA
+      maintainer_ref: 64c3d4e5c76f67bc378b18cbb297a3a5ca69ee5a
       config_path: .maintainer.yml
       runner_labels: '["self-hosted", "linux", "x64", "repo-maintainer"]'
       install_codex: true

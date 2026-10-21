@@ -121,9 +121,9 @@ jobs:
       pull-requests: write
       issues: write
       actions: write
-    uses: djsydney04/repo_maintainer/.github/workflows/maintain.yml@FULL_COMMIT_SHA
+    uses: djsydney04/repo_maintainer/.github/workflows/maintain.yml@64c3d4e5c76f67bc378b18cbb297a3a5ca69ee5a
     with:
-      maintainer_ref: FULL_COMMIT_SHA
+      maintainer_ref: 64c3d4e5c76f67bc378b18cbb297a3a5ca69ee5a
       config_path: .maintainer.yml
       install_codex: true
     secrets:
@@ -136,8 +136,8 @@ jobs:
       SDK_MAINTENANCE_API_KEY: ${{ secrets.SDK_MAINTENANCE_API_KEY }}
 ```
 
-Replace both `FULL_COMMIT_SHA` placeholders with the **same reviewed full SHA**
-that includes the selected runner and validation features. A change to the shared
+Both references pin the same implementation commit. Review it before enabling
+a schedule, and keep `uses` and `maintainer_ref` on the same full SHA when updating. A change to the shared
 repository only affects your bot after you update that pin.
 
 The example runs Mondays at 9 AM Pacific, including DST. Change the cron and
