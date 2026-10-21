@@ -1,0 +1,15 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Automatically merge patch PRs after CI without a model call",
+  "automerge": false,
+  "automergeType": "pr",
+  "platformAutomerge": false,
+  "ignoreTests": false,
+  "packageRules": [
+    {
+      "description": "Only patch updates qualify by default",
+      "matchUpdateTypes": ["patch"],
+      "automerge": true
+    }
+  ]
+}

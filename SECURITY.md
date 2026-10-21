@@ -21,5 +21,12 @@ or run unrelated privileged jobs alongside them.
 
 Local runs mount the target read-only and operate on its committed HEAD in a
 temporary clone. Only proposal artifacts are returned. GitHub publishing is an
-explicit workflow command in a separate job with write permissions. The project
-does not merge PRs, force push, deploy or release maintained repositories.
+explicit workflow command in a separate job with write permissions. The
+documentation maintenance workflow does not merge PRs, force push, deploy or
+release maintained repositories.
+
+The separate, opt-in dependency merge action can request merging of verified
+Dependabot PRs through GitHub's required checks and reviews. It never checks out
+or executes PR contents, approves reviews, or requests an administrator bypass.
+The Renovate preset delegates dependency merging to Renovate. See the
+[dependency setup and trust boundary](docs/dependency-updates.md).

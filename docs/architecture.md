@@ -34,8 +34,10 @@ checks. It has no general shell, repository plugins, subagents or GitHub-write
 tools. Provider keys are removed from its environment before source tools and
 checks run. Independent validation must succeed before publishing.
 
-The bot never force pushes, merges, releases or deploys. A human reviews the
-resulting PR. Existing maintenance PRs receive review/CI feedback on later runs.
+The documentation agent never force pushes, merges, releases or deploys. A human
+reviews the resulting PR. Existing maintenance PRs receive review/CI feedback on
+later runs. A separate [dependency merge integration](dependency-updates.md) can
+merge eligible bot updates after CI when explicitly enabled by the consumer.
 
 ## Limits and incomplete work
 

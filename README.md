@@ -15,6 +15,7 @@ sources you choose, makes focused changes, runs checks, and proposes a pull
 request for your review. Configure it in **one `.maintainer.yml` file**.
 
 **[Get started](docs/getting-started.md)** · **[Configuration](docs/configuration.md)** ·
+**[Dependency auto-merge](docs/dependency-updates.md)** ·
 **[How it works](docs/architecture.md)** · **[Troubleshooting](docs/troubleshooting.md)** ·
 **[Contribute](CONTRIBUTING.md)**
 
@@ -111,6 +112,14 @@ package verification and dependency audit before opening/updating a PR.
 Proposals are limited to **25 regular files**, **500 KB**, and **16 model requests**.
 A new blocker creates an assigned issue; unchanged blockers and successful
 no-ops stay quiet. [Architecture and limits →](docs/architecture.md)
+
+## Dependency PRs without inference
+
+Managed repositories can opt into a [shared Dependabot action or Renovate preset](docs/dependency-updates.md)
+to merge patch updates after CI and required reviews. Minor updates are optional;
+major and unknown updates stay for human review. This path makes **zero model
+calls** and needs no API key or maintainer build. Documentation proposals continue
+to require human review.
 
 ## Project information
 
