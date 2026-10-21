@@ -4,7 +4,7 @@
 module.exports = async function automerge({github, context, core, exec}, options) {
   const skip = reason => {
     core.notice(reason);
-    core.setOutput('result', 'skipped');
+    core.setOutput('decision', 'skipped');
   };
   if (!['true', 'false'].includes(options.allowMinor)) {
     throw new Error('allow-minor must be true or false');
@@ -73,7 +73,7 @@ module.exports = async function automerge({github, context, core, exec}, options
     throw new Error('Enable Allow auto-merge and Allow squash merging in the consuming repository settings.');
   }
   if (pr.auto_merge) {
-    core.setOutput('result', 'already-enabled');
+    core.setOutput('decision', 'already-enabled');
     return;
   }
 
@@ -83,6 +83,6 @@ module.exports = async function automerge({github, context, core, exec}, options
     'pr', 'merge', String(pr.number), '--repo', repository,
     '--auto', '--squash', '--match-head-commit', pr.head.sha,
   ]);
-  core.setOutput('result', 'requested');
+  core.setOutput('decision', 'requested');
   core.notice('Requested dependency merge through GitHub required checks and reviews.');
 };

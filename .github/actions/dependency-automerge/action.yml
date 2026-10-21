@@ -7,7 +7,7 @@ inputs:
 outputs:
   result:
     description: requested, already-enabled, or skipped
-    value: ${{ steps.merge.outputs.result }}
+    value: ${{ steps.merge.outputs.decision }}
 runs:
   using: composite
   steps:

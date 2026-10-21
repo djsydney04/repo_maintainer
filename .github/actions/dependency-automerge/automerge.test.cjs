@@ -56,7 +56,7 @@ function fixture() {
 test('patch requests GitHub auto-merge with the evaluated head and no bypass', async () => {
   const f = fixture();
   await f.run();
-  assert.equal(f.outputs.result, 'requested');
+  assert.equal(f.outputs.decision, 'requested');
   assert.deepEqual(f.calls.at(-1), ['exec', 'gh', [
     'pr', 'merge', '7', '--repo', 'example/project', '--auto', '--squash',
     '--match-head-commit', 'a'.repeat(40),
@@ -67,11 +67,11 @@ test('minor requires explicit opt-in, including grouped updates', async () => {
   const f = fixture();
   f.dependencies.push({updateType: 'version-update:semver-minor'});
   await f.run();
-  assert.equal(f.outputs.result, 'skipped');
+  assert.equal(f.outputs.decision, 'skipped');
   assert.deepEqual(f.calls, []);
   f.allowMinor = 'true';
   await f.run();
-  assert.equal(f.outputs.result, 'requested');
+  assert.equal(f.outputs.decision, 'requested');
 });
 
 for (const type of ['version-update:semver-major', '', 'unknown', undefined]) {
@@ -80,7 +80,7 @@ for (const type of ['version-update:semver-major', '', 'unknown', undefined]) {
     f.allowMinor = 'true';
     f.dependencies.push({updateType: type});
     await f.run();
-    assert.equal(f.outputs.result, 'skipped');
+    assert.equal(f.outputs.decision, 'skipped');
     assert.deepEqual(f.calls, []);
   });
 }
@@ -90,7 +90,7 @@ for (const raw of ['', 'not JSON', '{}', '[]', 'null', '[null]']) {
     const f = fixture();
     f.rawMetadata = raw;
     await f.run();
-    assert.equal(f.outputs.result, 'skipped');
+    assert.equal(f.outputs.decision, 'skipped');
     assert.deepEqual(f.calls, []);
   });
 }
@@ -112,7 +112,7 @@ for (const [name, change] of Object.entries(ineligible)) {
     const f = fixture();
     change(f);
     await f.run();
-    assert.equal(f.outputs.result, 'skipped');
+    assert.equal(f.outputs.decision, 'skipped');
     assert.deepEqual(f.calls, []);
   });
 }
@@ -127,7 +127,7 @@ for (const change of [
     const f = fixture();
     change(f);
     await f.run();
-    assert.equal(f.outputs.result, 'skipped');
+    assert.equal(f.outputs.decision, 'skipped');
     assert.equal(f.calls.length, 1);
   });
 }
@@ -144,7 +144,7 @@ for (const change of [
     const f = fixture();
     change(f);
     await f.run();
-    assert.equal(f.outputs.result, 'skipped');
+    assert.equal(f.outputs.decision, 'skipped');
     assert.equal(f.calls.some(call => call[0] === 'exec'), false);
   });
 }
@@ -156,7 +156,7 @@ test('a human commit appended to a genuine bot PR cannot merge', async () => {
   f.commits.unshift(human);
   f.pr.commits = 2;
   await f.run();
-  assert.equal(f.outputs.result, 'skipped');
+  assert.equal(f.outputs.decision, 'skipped');
 });
 
 test('active rulesets work without classic branch protection', async () => {
@@ -164,7 +164,7 @@ test('active rulesets work without classic branch protection', async () => {
   f.settings.ref.branchProtectionRule = null;
   f.rules = [{type: 'required_status_checks', parameters: {required_status_checks: [{context: 'CI'}]}}];
   await f.run();
-  assert.equal(f.outputs.result, 'requested');
+  assert.equal(f.outputs.decision, 'requested');
   assert.ok(f.calls.some(call => call[0].includes('/rules/branches/')));
 });
 
@@ -198,7 +198,7 @@ test('rerunning an already enabled PR does not request another merge', async () 
   const f = fixture();
   f.pr.auto_merge = {};
   await f.run();
-  assert.equal(f.outputs.result, 'already-enabled');
+  assert.equal(f.outputs.decision, 'already-enabled');
   assert.equal(f.calls.some(call => call[0] === 'exec'), false);
 });
 
@@ -206,7 +206,7 @@ test('CLI failure, including a concurrent head change, is not reported as succes
   const f = fixture();
   f.execError = true;
   await assert.rejects(f.run(), /Head changed/);
-  assert.equal(f.outputs.result, undefined);
+  assert.equal(f.outputs.decision, undefined);
 });
 
 test('invalid policy input fails before any API call', async () => {
