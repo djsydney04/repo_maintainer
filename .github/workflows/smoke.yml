@@ -1,4 +1,4 @@
-name: Live Pi repair diagnostic
+name: Live Rust repair diagnostic
 on:
   workflow_call:
     inputs:
@@ -37,14 +37,10 @@ jobs:
           repository: djsydney04/repo_maintainer
           ref: ${{ inputs.maintainer_ref }}
           persist-credentials: false
-      - run: python3 -m pip install --disable-pip-version-check -r requirements.txt
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: '24'
-      - run: npm ci --prefix agent --ignore-scripts --no-audit --no-fund
-      - run: rustup toolchain install stable --profile minimal
-      - run: rustup default stable
-      - run: rustup component add rustfmt clippy
+      - name: Build the Rust agent and install check tools
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          cargo +stable build --release --locked
       - name: Verify real inference, editing and offline Rust repair
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -55,4 +51,4 @@ jobs:
           MAINTENANCE_PROVIDER: ${{ inputs.provider }}
           MAINTENANCE_MODEL: ${{ inputs.model }}
           MAINTENANCE_ALLOW_PAID: ${{ inputs.allow_paid && 'true' || '' }}
-        run: python3 scripts/maintain.py smoke --artifacts "$RUNNER_TEMP/smoke"
+        run: target/release/repo-maintainer smoke --artifacts "$RUNNER_TEMP/smoke"

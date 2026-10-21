@@ -1,0 +1,39 @@
+[package]
+name = "repo-maintainer"
+version = "0.2.0"
+authors = ["Dylan Mitic"]
+edition = "2024"
+rust-version = "1.89"
+description = "A Rust maintenance agent that turns official documentation changes into validated pull requests"
+license = "MIT"
+repository = "https://github.com/djsydney04/repo_maintainer"
+homepage = "https://github.com/djsydney04/repo_maintainer"
+readme = "README.md"
+keywords = ["maintenance", "automation", "agent", "github", "rust"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "repo-maintainer"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive", "env"] }
+libc = "0.2"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+scraper = { version = "0.27", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde-saphyr = { version = "2", default-features = false, features = ["deserialize"] }
+sha2 = "0.10"
+tempfile = "3"
+url = "2"
+walkdir = "2"
+
+[dev-dependencies]
+tiny_http = "0.12"
+
+[profile.release]
+lto = "thin"
+strip = true

@@ -68,7 +68,10 @@ jobs:
           ref: ${{ inputs.maintainer_ref }}
           path: automation
           persist-credentials: false
-      - run: python3 -m pip install --disable-pip-version-check -r automation/requirements.txt
+      - name: Build the Rust maintainer
+        run: |
+          rustup toolchain install stable --profile minimal
+          cargo +stable build --release --locked --manifest-path automation/Cargo.toml
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           path: consumer
@@ -78,7 +81,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          python3 automation/scripts/maintain.py prepare
+          automation/target/release/repo-maintainer prepare
           --artifacts "$RUNNER_TEMP/proposal"
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -87,19 +90,14 @@ jobs:
           ref: ${{ steps.prepare.outputs.sha }}
           path: source
           persist-credentials: false
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: '24'
-      - name: Install the coding agent and Rust check tools
+      - name: Install Rust check tools
         run: |
-          npm ci --prefix automation/agent --ignore-scripts --no-audit --no-fund
           rustup toolchain install stable --profile minimal
           rustup default stable
           rustup component add rustfmt clippy
           cargo fetch --manifest-path source/Cargo.toml --locked
-      - name: Inspect, edit, test and repair using Pi
+      - name: Inspect, edit, test and repair using Rust
         id: agent
-        working-directory: source
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -108,9 +106,9 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           status=0
-          timeout --kill-after=30s 20m node ../automation/agent/agent.mjs \
-            "$RUNNER_TEMP/proposal/brief.md" \
-            > "$RUNNER_TEMP/pi-result.json" 2> "$RUNNER_TEMP/pi-stderr.log" || status=$?
+          timeout --kill-after=30s 21m automation/target/release/repo-maintainer agent \
+            --source source --prompt "$RUNNER_TEMP/proposal/brief.md" \
+            > "$RUNNER_TEMP/agent-result.json" 2> "$RUNNER_TEMP/agent-stderr.log" || status=$?
           echo "exit-code=$status" >> "$GITHUB_OUTPUT"
       - name: Verify the proposal boundary and structured result
         id: collect
@@ -118,9 +116,9 @@ jobs:
         env:
           AGENT_EXIT_CODE: ${{ steps.agent.outputs.exit-code }}
         run: >-
-          python3 automation/scripts/maintain.py collect
+          automation/target/release/repo-maintainer collect
           --source source --artifacts "$RUNNER_TEMP/proposal"
-          --raw "$RUNNER_TEMP/pi-result.json" --exit-code "$AGENT_EXIT_CODE"
+          --raw "$RUNNER_TEMP/agent-result.json" --exit-code "$AGENT_EXIT_CODE"
       - name: Retain completed or partial proposals
         if: always() && steps.prepare.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -144,7 +142,10 @@ jobs:
           ref: ${{ inputs.maintainer_ref }}
           path: automation
           persist-credentials: false
-      - run: python3 -m pip install --disable-pip-version-check -r automation/requirements.txt
+      - name: Build the Rust maintainer
+        run: |
+          rustup toolchain install stable --profile minimal
+          cargo +stable build --release --locked --manifest-path automation/Cargo.toml
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           path: consumer
@@ -158,7 +159,7 @@ jobs:
         with:
           name: sdk-maintenance-proposal
           path: ${{ runner.temp }}/proposal
-      - run: python3 automation/scripts/maintain.py apply --source source --artifacts "$RUNNER_TEMP/proposal"
+      - run: automation/target/release/repo-maintainer apply --source source --artifacts "$RUNNER_TEMP/proposal"
       - name: Install validation tools
         env:
           RUST_MSRV: ${{ needs.propose.outputs.msrv }}
@@ -180,7 +181,7 @@ jobs:
           cargo clippy --workspace --all-targets --locked -- -D warnings
           cargo doc --workspace --no-deps --locked
           cargo "+$RUST_MSRV" check --workspace --all-targets --locked
-          if [ -n "$PACKAGE_CHECK" ]; then python3 "$PACKAGE_CHECK"; fi
+          if [ -n "$PACKAGE_CHECK" ]; then "./$PACKAGE_CHECK"; fi
           cargo audit --deny warnings
   publish:
     needs: [propose, validate]
@@ -198,7 +199,10 @@ jobs:
           ref: ${{ inputs.maintainer_ref }}
           path: automation
           persist-credentials: false
-      - run: python3 -m pip install --disable-pip-version-check -r automation/requirements.txt
+      - name: Build the Rust maintainer
+        run: |
+          rustup toolchain install stable --profile minimal
+          cargo +stable build --release --locked --manifest-path automation/Cargo.toml
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           path: consumer
@@ -215,12 +219,12 @@ jobs:
       - name: Open or update a PR and dispatch full CI
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 automation/scripts/maintain.py publish --source source --artifacts "$RUNNER_TEMP/proposal"
+        run: automation/target/release/repo-maintainer publish --source source --artifacts "$RUNNER_TEMP/proposal"
   notify:
     needs: [propose, validate, publish]
     if: always() && github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: read
       issues: write
@@ -231,7 +235,10 @@ jobs:
           ref: ${{ inputs.maintainer_ref }}
           path: automation
           persist-credentials: false
-      - run: python3 -m pip install --disable-pip-version-check -r automation/requirements.txt
+      - name: Build the Rust maintainer
+        run: |
+          rustup toolchain install stable --profile minimal
+          cargo +stable build --release --locked --manifest-path automation/Cargo.toml
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           path: consumer
@@ -248,4 +255,4 @@ jobs:
           PROPOSE_RESULT: ${{ needs.propose.result }}
           VALIDATE_RESULT: ${{ needs.validate.result }}
           PUBLISH_RESULT: ${{ needs.publish.result }}
-        run: python3 automation/scripts/maintain.py notify --artifacts "$RUNNER_TEMP/proposal"
+        run: automation/target/release/repo-maintainer notify --artifacts "$RUNNER_TEMP/proposal"
