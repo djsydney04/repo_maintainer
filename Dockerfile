@@ -9,7 +9,7 @@ RUN cargo build --release --locked
 FROM ${RUNTIME_IMAGE}
 ARG INSTALL_CODEX=true
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git gh curl ca-certificates python3 build-essential pkg-config \
+    git gh curl ca-certificates python3 bubblewrap build-essential pkg-config \
     && rm -rf /var/lib/apt/lists/* \
     && if command -v rustup >/dev/null; then \
          rustup toolchain install stable --profile minimal --component rustfmt --component clippy \
@@ -21,7 +21,7 @@ COPY --from=build /build/target/release/repo-maintainer /usr/local/bin/repo-main
 COPY scripts/install-codex.sh /usr/local/lib/maintainer/install-codex.sh
 RUN if [ "$INSTALL_CODEX" = true ]; then bash /usr/local/lib/maintainer/install-codex.sh; \
     elif [ "$INSTALL_CODEX" != false ]; then echo 'INSTALL_CODEX must be true or false' >&2; exit 1; fi
-ENV CARGO_HOME=/tmp/maintainer-cargo HOME=/tmp/maintainer-home
+ENV CARGO_HOME=/tmp/maintainer-cargo HOME=/home/maintainer
 USER maintainer
 WORKDIR /repository
 ENTRYPOINT ["repo-maintainer"]

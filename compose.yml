@@ -27,6 +27,8 @@ services:
       no_proxy: ${no_proxy:-${NO_PROXY:-}}
     extra_hosts:
       - host.docker.internal:host-gateway
+    tmpfs:
+      - /home/maintainer:uid=${MAINTAINER_UID:-1000},gid=${MAINTAINER_GID:-1000},mode=0700
     volumes:
       - type: bind
         source: ${REPOSITORY_PATH:-.}

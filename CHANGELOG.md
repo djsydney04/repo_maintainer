@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Default new version-2 configurations to a general Codex worker, custom project
+  checks and outbound tool access. Add Docker private networks, DNS, proxies and
+  verified custom CA trust; preserve version-1 defaults.
 - Add Codex CLI as a coding-agent runner with structured output, explicit account
   opt-in, sandbox selection and bounded execution.
 - Add language-independent setup/check commands and optional documentation sources;

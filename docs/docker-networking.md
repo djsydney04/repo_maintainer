@@ -106,6 +106,8 @@ with repeated `-f` arguments.
 
 The container runs as an unprivileged user. The target checkout is read-only;
 the agent edits a temporary clone and returns its patch/report through `/output`.
+Compose gives the selected user a private temporary home for Codex's runtime
+files. It is discarded when the worker exits.
 There is no Docker socket mount, privileged mode or inbound listener. Connect
 only the private networks and services needed for the task: the agent's commands
 and project tests can use the network access you provide.
