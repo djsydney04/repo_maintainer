@@ -1,45 +1,158 @@
 name: Maintainer checks
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
+  changes:
+    name: Select checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+    outputs:
+      rust: ${{ steps.changes.outputs.rust }}
+      docker: ${{ steps.changes.outputs.docker }}
+      workflows: ${{ steps.changes.outputs.workflows }}
+      matrix: ${{ steps.targets.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select checks from the complete change
+        id: changes
+        run: bash .github/scripts/ci-changes.sh "$BASE_REF" >> "$GITHUB_OUTPUT"
+      - name: Check whitespace and the change selector
+        run: |
+          if base_commit=$(git rev-parse --verify --end-of-options "$BASE_REF^{commit}" 2>/dev/null); then
+            git diff --check "$base_commit" HEAD --
+          else
+            git show --format= --check HEAD
+          fi
+          bash .github/scripts/test-ci-changes.sh
+      - name: Select compatibility targets
+        id: targets
+        run: |
+          targets='{"os":"ubuntu-latest","toolchain":"stable","lint":true},{"os":"ubuntu-latest","toolchain":"1.89.0","lint":false},{"os":"macos-latest","toolchain":"stable","lint":false}'
+          if [[ "$GITHUB_EVENT_NAME" != pull_request ]]; then
+            targets+=',{"os":"macos-latest","toolchain":"1.89.0","lint":false}'
+          fi
+          echo "matrix={\"include\":[$targets]}" >> "$GITHUB_OUTPUT"
   rust:
     name: Rust (${{ matrix.os }}, ${{ matrix.toolchain }})
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     strategy:
       fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-        toolchain: [stable, '1.89.0']
+      matrix: ${{ fromJSON(needs.changes.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      RUSTUP_TOOLCHAIN: ${{ matrix.toolchain }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
       - name: Install Rust
-        env:
-          TOOLCHAIN: ${{ matrix.toolchain }}
-        run: rustup toolchain install "$TOOLCHAIN" --profile minimal --component rustfmt --component clippy
-      - name: Format, lint and test without API credentials
-        env:
-          TOOLCHAIN: ${{ matrix.toolchain }}
+        run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+      - name: Install lint tools
+        if: matrix.lint
+        run: rustup component add rustfmt clippy --toolchain "$RUSTUP_TOOLCHAIN"
+      - name: Restore Rust dependencies and build artifacts
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          key: ${{ matrix.toolchain }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Format and lint once
+        if: matrix.lint
         run: |
-          cargo +"$TOOLCHAIN" fmt --all --check
-          cargo +"$TOOLCHAIN" clippy --locked --all-targets -- -D warnings
-          cargo +"$TOOLCHAIN" test --locked
-          cargo +"$TOOLCHAIN" run --locked -- check --config maintainer.example.yml
+          cargo fmt --all --check
+          cargo clippy --locked --all-targets -- -D warnings
+      - name: Test and validate configuration without API credentials
+        run: |
+          cargo test --locked
+          cargo run --locked -- check --config maintainer.example.yml
   docker:
+    needs: changes
+    if: needs.changes.outputs.docker == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
       - run: docker compose config --quiet
-      - run: docker build --tag repo-maintainer:test .
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - name: Build and load the cached image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: 'false'
+        with:
+          context: .
+          load: true
+          tags: repo-maintainer:test
+          cache-from: type=gha,scope=maintainer-image
+          cache-to: ${{ github.ref == 'refs/heads/main' && 'type=gha,scope=maintainer-image,mode=max' || '' }}
       - name: Validate YAML without an API key
         run: docker run --rm --volume "$PWD:/repository:ro" repo-maintainer:test check --config maintainer.example.yml
       - name: Check Rust tools as the container user
         run: |
           docker run --rm --entrypoint cargo repo-maintainer:test --version
           docker run --rm --entrypoint cargo repo-maintainer:test fmt --version
+  workflows:
+    name: Workflow syntax
+    needs: changes
+    if: needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Validate workflows with pinned actionlint
+        run: |
+          cd "$RUNNER_TEMP"
+          curl --fail --location --silent --show-error --retry 3 \
+            --output actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  actionlint.tar.gz' | sha256sum --check
+          tar -xzf actionlint.tar.gz actionlint
+          cd "$GITHUB_WORKSPACE"
+          "$RUNNER_TEMP/actionlint"
+  ci:
+    name: CI
+    needs: [changes, rust, docker, workflows]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every selected check to pass
+        env:
+          SELECT_RESULT: ${{ needs.changes.result }}
+          RUST_REQUIRED: ${{ needs.changes.outputs.rust }}
+          RUST_RESULT: ${{ needs.rust.result }}
+          DOCKER_REQUIRED: ${{ needs.changes.outputs.docker }}
+          DOCKER_RESULT: ${{ needs.docker.result }}
+          WORKFLOWS_REQUIRED: ${{ needs.changes.outputs.workflows }}
+          WORKFLOWS_RESULT: ${{ needs.workflows.result }}
+        run: |
+          for required in "$RUST_REQUIRED" "$DOCKER_REQUIRED" "$WORKFLOWS_REQUIRED"; do
+            if [[ "$required" != true && "$required" != false ]]; then
+              echo 'Missing check-selection output.' >&2
+              exit 1
+            fi
+          done
+          if [[ "$SELECT_RESULT" != success ||
+                ("$RUST_REQUIRED" == true && "$RUST_RESULT" != success) ||
+                ("$DOCKER_REQUIRED" == true && "$DOCKER_RESULT" != success) ||
+                ("$WORKFLOWS_REQUIRED" == true && "$WORKFLOWS_RESULT" != success) ]]; then
+            echo 'A selected CI check did not pass.' >&2
+            exit 1
+          fi
