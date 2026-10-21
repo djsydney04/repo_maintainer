@@ -6,8 +6,10 @@ import os
 import subprocess
 import sys
 
+from config_loader import load_config
 
-CRATES = tuple(json.loads(open(os.environ["MAINTENANCE_CONFIG"]).read())["rust"]["crates"]) if os.environ.get("MAINTENANCE_CONFIG") else ("prism-ai-core",)
+
+CRATES = tuple(load_config(os.environ["MAINTENANCE_CONFIG"])["rust"]["crates"]) if os.environ.get("MAINTENANCE_CONFIG") else ("prism-ai-core",)
 TOOL = {
     "name": "check_rust",
     "description": "Run a bounded offline Rust check, then inspect the output and repair failures.",

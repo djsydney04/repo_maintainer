@@ -65,8 +65,8 @@ function boundedTool(tool, cwd, profile, smoke, policy, edit = false) {
 }
 
 export async function runAgent(prompt, { smoke = false } = {}) {
-  const profile = configuration(process.env);
-  const config = process.env.MAINTENANCE_CONFIG ? JSON.parse(await readFile(process.env.MAINTENANCE_CONFIG, "utf8")) : {};
+  const config = process.env.MAINTENANCE_CONFIG ? JSON.parse(await python([resolve(automation, "scripts/config_loader.py"), process.env.MAINTENANCE_CONFIG])) : {};
+  const profile = configuration(process.env, config.agent);
   if (!smoke && config.version !== 1) throw new Error("Set MAINTENANCE_CONFIG to the consumer repository config");
   const secrets = Object.entries(process.env).filter(([name]) => credentialName.test(name)).map(([, value]) => value);
   const cwd = await realpath(process.cwd());
@@ -83,7 +83,7 @@ export async function runAgent(prompt, { smoke = false } = {}) {
     const configured = runtime.getModel(profile.provider, profile.model);
     if (!configured) throw new Error("Selected model is absent from the pinned Pi catalog");
     const model = { ...configured, contextWindow: profile.contextWindow, maxTokens: profile.maxTokens };
-    runtime.streamSimple = budgetedStream(runtime.streamSimple.bind(runtime), profile, { maxRequests: smoke ? 6 : 16 });
+    runtime.streamSimple = budgetedStream(runtime.streamSimple.bind(runtime), profile, { maxRequests: smoke ? 6 : profile.maxRequests });
     const tools = [
       boundedTool(createReadToolDefinition(cwd), cwd, profile, smoke, config.editable),
       boundedTool(createEditToolDefinition(cwd), cwd, profile, smoke, config.editable, true),
@@ -94,7 +94,7 @@ export async function runAgent(prompt, { smoke = false } = {}) {
       {
         name: "check_rust", label: "Rust checks", description: "Run offline format, tests or Clippy; inspect failures and repair them.",
         parameters: Type.Object({ check: Type.Union([Type.Literal("format"), Type.Literal("tests"), Type.Literal("clippy")]),
-          crate: Type.Optional(Type.Union((config.rust?.crates || ["prism-ai-core"]).map((value) => Type.Literal(value)))) }, { additionalProperties: false }),
+          crate: Type.Optional(Type.Union((config.rust?.crates?.length ? config.rust.crates : ["prism-ai-core"]).map((value) => Type.Literal(value)))) }, { additionalProperties: false }),
         async execute(id, arguments_, signal) {
           const input = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "check_rust", arguments: arguments_ } }) + "\n";
           const response = JSON.parse(await python([resolve(automation, "scripts/checks.py")], { input, signal }));
@@ -106,7 +106,7 @@ export async function runAgent(prompt, { smoke = false } = {}) {
         },
       },
       {
-        name: "reference", label: "Official reference", description: "Read an official OpenAI, Gemini or Groq API reference. Use offset to page through an excerpt.",
+        name: "reference", label: "Official reference", description: "Read a reference from the configured official documentation hosts. Use offset to page through an excerpt.",
         parameters: Type.Object({ url: Type.String(), offset: Type.Optional(Type.Integer({ minimum: 0 })),
           limit: Type.Optional(Type.Integer({ minimum: 200, maximum: 4000 })) }, { additionalProperties: false }),
         async execute(id, args, signal) {

@@ -11,10 +11,14 @@ on:
         default: .github/maintainer.json
       provider:
         type: string
-        default: google
+        default: ''
       model:
         type: string
         default: ''
+      allow_paid:
+        description: Explicitly allow a paid provider (or set agent.allow_paid in YAML)
+        type: boolean
+        default: false
       owner:
         type: string
         default: ''
@@ -22,6 +26,10 @@ on:
       GEMINI_API_KEY:
         required: false
       GROQ_API_KEY:
+        required: false
+      OPENAI_API_KEY:
+        required: false
+      ANTHROPIC_API_KEY:
         required: false
       SDK_MAINTENANCE_API_KEY:
         required: false
@@ -36,6 +44,7 @@ env:
   RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
   MAINTENANCE_PROVIDER: ${{ inputs.provider }}
   MAINTENANCE_MODEL: ${{ inputs.model }}
+  MAINTENANCE_ALLOW_PAID: ${{ inputs.allow_paid && 'true' || '' }}
   MAINTENANCE_CONFIG: ${{ github.workspace }}/consumer/${{ inputs.config_path }}
   MAINTENANCE_REPOSITORY_ROOT: ${{ github.workspace }}/consumer
 jobs:
@@ -59,6 +68,7 @@ jobs:
           ref: ${{ inputs.maintainer_ref }}
           path: automation
           persist-credentials: false
+      - run: python3 -m pip install --disable-pip-version-check -r automation/requirements.txt
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           path: consumer
@@ -94,6 +104,8 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           SDK_MAINTENANCE_API_KEY: ${{ secrets.SDK_MAINTENANCE_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           status=0
           timeout --kill-after=30s 20m node ../automation/agent/agent.mjs \
@@ -132,6 +144,7 @@ jobs:
           ref: ${{ inputs.maintainer_ref }}
           path: automation
           persist-credentials: false
+      - run: python3 -m pip install --disable-pip-version-check -r automation/requirements.txt
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           path: consumer
@@ -167,7 +180,7 @@ jobs:
           cargo clippy --workspace --all-targets --locked -- -D warnings
           cargo doc --workspace --no-deps --locked
           cargo "+$RUST_MSRV" check --workspace --all-targets --locked
-          python3 "$PACKAGE_CHECK"
+          if [ -n "$PACKAGE_CHECK" ]; then python3 "$PACKAGE_CHECK"; fi
           cargo audit --deny warnings
   publish:
     needs: [propose, validate]
@@ -185,6 +198,7 @@ jobs:
           ref: ${{ inputs.maintainer_ref }}
           path: automation
           persist-credentials: false
+      - run: python3 -m pip install --disable-pip-version-check -r automation/requirements.txt
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           path: consumer
@@ -217,6 +231,7 @@ jobs:
           ref: ${{ inputs.maintainer_ref }}
           path: automation
           persist-credentials: false
+      - run: python3 -m pip install --disable-pip-version-check -r automation/requirements.txt
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           path: consumer

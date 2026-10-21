@@ -1,0 +1,26 @@
+# Copy this file to .maintainer.yml in your Rust repository, then edit the sources.
+version: 1
+name: SDK maintenance
+agent:
+  provider: groq                # google, groq, openai, anthropic
+  # model: openai/gpt-oss-120b  # Optional: the provider default is used when omitted.
+  # allow_paid: true           # Required for openai or anthropic; no paid fallback.
+  max_requests: 16
+
+sources:
+  - https://developers.openai.com/api/docs/changelog
+
+instructions: |
+  Keep the Rust SDK aligned with the official documentation.
+  Preserve public APIs and add meaningful offline contract tests for changes.
+
+editable:
+  root_files: [README.md]
+  markdown_dirs: [docs]
+  source_dirs: [src, crates]
+  extensions: [.rs, .md, .json]
+
+rust:
+  msrv: 1.88.0
+  # crates: [my-sdk]           # Optional names for checks scoped to a package.
+  # package_check: scripts/verify-packages.py

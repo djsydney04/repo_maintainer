@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import sys
+sys.path.insert(0, str(Path(__file__).parents[1] / "scripts"))
 import unittest
 from unittest.mock import patch
 

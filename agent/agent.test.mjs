@@ -24,6 +24,16 @@ test("quota errors never switch providers or keys", async () => {
   assert.equal(calls, 1);
 });
 
+test("OpenAI and Anthropic use their own keys only after paid usage is enabled", () => {
+  for (const [provider, name] of [["openai", "OPENAI_API_KEY"], ["anthropic", "ANTHROPIC_API_KEY"]]) {
+    assert.throws(() => configuration({ MAINTENANCE_PROVIDER: provider, [name]: "test" }), /allow_paid/);
+    const result = configuration({ [name]: "test" }, { provider, allow_paid: true });
+    assert.equal(result.apiKey, "test");
+    assert.equal(result.provider, provider);
+    assert.throws(() => configuration({ GEMINI_API_KEY: "wrong" }, { provider, allow_paid: true }), new RegExp(name));
+  }
+});
+
 test("every inference including summaries shares the request and pacing budget", async () => {
   let clock = 1000, calls = 0;
   const waits = [];

@@ -1,29 +1,18 @@
-// Explicit profiles keep quota changes separate from agent behavior.
-export const profiles = {
-  google: {
-    key: "GEMINI_API_KEY", defaultModel: "gemini-3.8-flash",
-    models: ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"],
-    intervalMs: 13_000, contextWindow: 100_000, maxTokens: 4096,
-    reserveTokens: 8192, keepRecentTokens: 12_000, maxInputChars: 300_000,
-  },
-  groq: {
-    key: "GROQ_API_KEY", defaultModel: "openai/gpt-oss-120b",
-    models: ["openai/gpt-oss-120b", "qwen/qwen3.8-27b"],
-    // Leave room below the published 8K TPM for output and token estimation.
-    intervalMs: 61_000, contextWindow: 6000, maxTokens: 1536,
-    reserveTokens: 2500, keepRecentTokens: 1200, maxInputChars: 18_000,
-  },
-};
+import { readFileSync } from "node:fs";
+export const profiles = JSON.parse(readFileSync(new URL("./providers.json", import.meta.url)));
 
-export function configuration(env) {
-  const provider = env.MAINTENANCE_PROVIDER || "google";
+export function configuration(env, agent = {}) {
+  let provider = env.MAINTENANCE_PROVIDER || agent.provider || "google";
+  if (provider === "oai") provider = "openai";
   const profile = profiles[provider];
-  if (!profile) throw new Error("Choose the google or groq maintenance provider");
-  const model = env.MAINTENANCE_MODEL || profile.defaultModel;
-  if (!profile.models.includes(model)) throw new Error(`Unsupported ${provider} model: ${model}`);
+  if (!profile) throw new Error("Choose google, groq, openai or anthropic as the maintenance provider");
+  const model = env.MAINTENANCE_MODEL || (env.MAINTENANCE_PROVIDER && provider !== agent.provider ? undefined : agent.model) || profile.defaultModel;
+  if (profile.models && !profile.models.includes(model)) throw new Error(`Unsupported ${provider} model: ${model}`);
+  const allowPaid = env.MAINTENANCE_ALLOW_PAID ? env.MAINTENANCE_ALLOW_PAID === "true" : agent.allow_paid === true;
+  if (profile.paid && !allowPaid) throw new Error(`${provider} requires agent.allow_paid: true; it is never a free-tier fallback`);
   const key = env.SDK_MAINTENANCE_API_KEY || env[profile.key];
   if (!key) throw new Error(`Add ${profile.key} (or SDK_MAINTENANCE_API_KEY) to Actions secrets`);
-  return { ...profile, provider, model, apiKey: key };
+  return { ...profile, provider, model, apiKey: key, maxRequests: agent.max_requests || 16 };
 }
 
 export function allowedEdit(name, smoke = false, policy) {

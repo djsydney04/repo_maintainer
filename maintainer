@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+maintainer_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+export REPOSITORY_PATH="$(cd -- "${REPOSITORY_PATH:-$PWD}" && pwd)"
+export MAINTAINER_UID="$(id -u)" MAINTAINER_GID="$(id -g)"
+if [[ "${1:-}" == init ]]; then
+  if [[ -e "$REPOSITORY_PATH/.maintainer.yml" ]]; then
+    echo '.maintainer.yml already exists; keeping your settings.'
+  else
+    cp -- "$maintainer_root/maintainer.example.yml" "$REPOSITORY_PATH/.maintainer.yml"
+    echo "Created $REPOSITORY_PATH/.maintainer.yml. Edit its docs sources and provider, then run maintainer check."
+  fi
+  exit 0
+fi
+export MAINTAINER_OUTPUT_PATH="${MAINTAINER_OUTPUT_PATH:-$REPOSITORY_PATH/.maintainer-output}"
+mkdir -p -- "$MAINTAINER_OUTPUT_PATH"
+exec docker compose --project-directory "$maintainer_root" -f "$maintainer_root/compose.yml" run --build --rm maintainer "${@:-check}"

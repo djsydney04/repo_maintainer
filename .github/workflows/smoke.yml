@@ -7,14 +7,21 @@ on:
         type: string
       provider:
         type: string
-        default: google
+        default: ''
       model:
         type: string
         default: ''
+      allow_paid:
+        type: boolean
+        default: false
     secrets:
       GEMINI_API_KEY:
         required: false
       GROQ_API_KEY:
+        required: false
+      OPENAI_API_KEY:
+        required: false
+      ANTHROPIC_API_KEY:
         required: false
       SDK_MAINTENANCE_API_KEY:
         required: false
@@ -30,6 +37,7 @@ jobs:
           repository: djsydney04/repo_maintainer
           ref: ${{ inputs.maintainer_ref }}
           persist-credentials: false
+      - run: python3 -m pip install --disable-pip-version-check -r requirements.txt
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
@@ -42,6 +50,9 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           SDK_MAINTENANCE_API_KEY: ${{ secrets.SDK_MAINTENANCE_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MAINTENANCE_PROVIDER: ${{ inputs.provider }}
           MAINTENANCE_MODEL: ${{ inputs.model }}
+          MAINTENANCE_ALLOW_PAID: ${{ inputs.allow_paid && 'true' || '' }}
         run: python3 scripts/maintain.py smoke --artifacts "$RUNNER_TEMP/smoke"
