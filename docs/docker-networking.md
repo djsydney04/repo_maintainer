@@ -27,8 +27,8 @@ From the target repository, with Repo Maintainer checked out beside it:
 ../repo_maintainer/maintainer run
 ```
 
-New configs use version 2: Codex, general project checks and outbound access for
-Codex's workspace-write tools. `agent.allow_paid: true` explicitly permits use of
+New configs use version 2: Codex, general project checks and outbound access.
+`agent.allow_paid: true` explicitly permits use of
 the configured account. The initial whitespace check is a starting point; add
 your repository's tests, lint and build commands before unattended code work.
 
@@ -104,7 +104,8 @@ with repeated `-f` arguments.
 
 ## Execution boundaries
 
-The container runs as an unprivileged user. The target checkout is read-only;
+Compose runs as an unprivileged user with a read-only root filesystem, all Linux
+capabilities dropped and privilege escalation disabled. The target checkout is read-only;
 the agent edits a temporary clone and returns its patch/report through `/output`.
 Compose gives the selected user a private temporary home for Codex's runtime
 files. It is discarded when the worker exits.
@@ -112,10 +113,19 @@ There is no Docker socket mount, privileged mode or inbound listener. Connect
 only the private networks and services needed for the task: the agent's commands
 and project tests can use the network access you provide.
 
-Codex keeps `workspace-write` by default. Set `agent.codex.network_access: false`
-to block tool networking inside that sandbox. Workers whose runtime cannot run
-the nested sandbox must be configured explicitly for an externally isolated
-execution mode; no silent sandbox fallback occurs. See
+For version-2 configs, Compose explicitly sets
+`MAINTENANCE_CODEX_SANDBOX_DEFAULT=danger-full-access`: Docker supplies isolation,
+and Codex can use the container's tools and network without nesting a second
+user-namespace sandbox. Explicit `agent.codex.sandbox` settings take precedence.
+Native runs default to `workspace-write`. Setting `agent.codex.network_access:
+false` also selects that sandbox unless a sandbox is explicitly configured.
+That network flag applies only to workspace-write; use your container network
+policy to restrict outbound access in container isolation mode.
+
+To require Codex's additional sandbox in Docker, set `agent.codex.sandbox:
+workspace-write` and use a runtime that permits nested user namespaces. A
+sandbox launch failure stops the run; it never triggers an automatic fallback.
+See
 [Codex's network configuration](https://learn.chatgpt.com/docs/config-file/config-reference).
 
 `run` produces local proposal artifacts. Use the existing self-hosted PR workflow

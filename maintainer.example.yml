@@ -8,8 +8,8 @@ agent:
   # model: your-model           # Omit to use Codex's default model.
   # codex:
   #   binary: codex             # Executable on PATH, or an absolute path.
-  #   sandbox: workspace-write
-  #   network_access: true      # Outbound access for tools inside the sandbox.
+  #   sandbox: workspace-write  # Native default; Compose supplies container isolation.
+  #   network_access: true      # Controls networking in workspace-write mode.
 
 instructions: |
   Inspect this repository for a small, useful maintenance improvement.

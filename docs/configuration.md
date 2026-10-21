@@ -47,8 +47,8 @@ YAML alias expansion is bounded.
 | `agent.timeout_seconds` | `1200` | Agent wall-clock limit, from 1 through 3600 seconds |
 | `agent.max_requests` | `16` | Builtin inference budget, from 1 through 16, including compaction; does not limit Codex turns |
 | `agent.codex.binary` | `codex` | Worker-owned executable on PATH or an absolute path |
-| `agent.codex.sandbox` | `workspace-write` | `read-only`, `workspace-write`, or explicit `danger-full-access` for externally isolated workers |
-| `agent.codex.network_access` | `true` in version 2 | Allow outbound access for workspace-write tools; explicit `false` restricts it |
+| `agent.codex.sandbox` | Native: `workspace-write`; v2 Compose: `danger-full-access` | `read-only`, `workspace-write`, or `danger-full-access` with isolation supplied by the worker |
+| `agent.codex.network_access` | `true` in version 2 | Allow outbound access for workspace-write tools; container isolation uses the Docker network policy |
 
 `init` writes version 2. If omitted there, `agent.runner` is Codex, validation is
 a generic whitespace check, and editable paths include common source/test
@@ -56,6 +56,10 @@ extensions. Account use still requires `agent.allow_paid: true`. Configure the
 project's actual checks before unattended work. Version 1, including files with
 no version field, retains its builtin runner, Rust validation and restricted
 Codex tool networking defaults. Explicit settings always take precedence.
+For version 2, `MAINTENANCE_CODEX_SANDBOX_DEFAULT` can supply the sandbox default;
+Compose sets it to `danger-full-access` and supplies container isolation. An
+explicit YAML sandbox or a restricted `network_access: false` request takes
+precedence over that default. See [Docker boundaries](docker-networking.md#execution-boundaries).
 
 ### Codex CLI
 

@@ -390,6 +390,19 @@ impl Config {
             codex
                 .entry("network_access")
                 .or_insert_with(|| serde_json::json!(true));
+            // Docker Compose supplies external isolation. A configured YAML
+            // sandbox or restricted network request still takes precedence.
+            let sandbox = if codex.get("network_access") == Some(&serde_json::json!(false)) {
+                "workspace-write"
+            } else {
+                env.get("MAINTENANCE_CODEX_SANDBOX_DEFAULT")
+                    .filter(|s| !s.is_empty())
+                    .map(String::as_str)
+                    .unwrap_or("workspace-write")
+            };
+            codex
+                .entry("sandbox")
+                .or_insert_with(|| serde_json::json!(sandbox));
             let validation = root
                 .entry("validation")
                 .or_insert_with(|| serde_json::json!({}))

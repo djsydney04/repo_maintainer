@@ -32,7 +32,7 @@ with tempfile.TemporaryDirectory() as temporary:
     (root / "ca-bundle.pem").write_bytes(Path("/etc/ssl/certs/ca-certificates.crt").read_bytes() + (root / "ca.crt").read_bytes())
     check_code = f"import urllib.request; assert b'private service' in urllib.request.urlopen({url!r}).read()"
     (root / ".maintainer.yml").write_text(json.dumps({
-        "version": 1, "sources": [url],
+        "version": 2, "agent": {"allow_paid": True}, "sources": [url],
         "validation": {"profile": "custom", "checks": [{
             "name": "private-service", "command": ["python3", "-c", check_code]
         }]}
@@ -87,7 +87,11 @@ http.server.ThreadingHTTPServer(("0.0.0.0", 8080), Proxy).serve_forever()
 
         def worker(arguments, *, trust=True, bypass=False, entrypoint="repo-maintainer"):
             command = ["docker", "run", "--rm", "--network", network,
+                       "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+                       "--tmpfs", "/tmp:mode=1777",
+                       "--tmpfs", "/home/maintainer:uid=10001,gid=10001,mode=0700",
                        "--mount", f"type=bind,source={root},target=/fixtures,readonly",
+                       "--env", "MAINTENANCE_CODEX_SANDBOX_DEFAULT=danger-full-access",
                        "--env", "HTTPS_PROXY=http://proxy.internal:8080",
                        "--env", "https_proxy=http://proxy.internal:8080",
                        "--env", "NO_PROXY=" + ("reference.internal" if bypass else ""),
@@ -111,12 +115,12 @@ http.server.ThreadingHTTPServer(("0.0.0.0", 8080), Proxy).serve_forever()
         after = run("docker", "logs", server).stdout.count("CONNECT ")
         assert before == after, "NO_PROXY must preserve direct private DNS access"
         sandbox = worker([
-            "-c", 'sandbox_mode="workspace-write"',
+            "-c", 'sandbox_mode="danger-full-access"',
             "-c", "sandbox_workspace_write.network_access=true", "sandbox", "--",
             "python3", "-c", check_code,
         ], entrypoint="codex")
         assert sandbox.returncode == 0, sandbox.stderr
-        print("Private DNS, proxy use/bypass, TLS verification, child checks and Codex sandbox networking passed.")
+        print("Private DNS, proxy use/bypass, TLS verification, child checks and Codex container networking passed.")
     finally:
         run("docker", "rm", "--force", server, check=False)
         run("docker", "network", "rm", network, check=False)

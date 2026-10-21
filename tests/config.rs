@@ -206,3 +206,25 @@ editable: {extensions: [.txt]}
     assert!(!config.agent.codex.network_access);
     assert_eq!(config.editable.extensions, [".txt"]);
 }
+
+#[test]
+fn container_sandbox_default_respects_explicit_policy_and_legacy_configs() {
+    let environment = Environment::from([(
+        "MAINTENANCE_CODEX_SANDBOX_DEFAULT".into(),
+        "danger-full-access".into(),
+    )]);
+    for (extra, expected) in [
+        ("", "danger-full-access"),
+        ("  codex: {sandbox: workspace-write}\n", "workspace-write"),
+        ("  codex: {network_access: false}\n", "workspace-write"),
+    ] {
+        let config = Config::from_str(
+            &format!("version: 2\nagent:\n  allow_paid: true\n{extra}"),
+            &environment,
+        )
+        .unwrap();
+        assert_eq!(config.agent.codex.sandbox, expected);
+    }
+    let legacy = Config::from_str("version: 1\n", &environment).unwrap();
+    assert_eq!(legacy.agent.codex.sandbox, "workspace-write");
+}

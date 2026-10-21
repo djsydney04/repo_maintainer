@@ -11,9 +11,12 @@ credentials or publish an exploit in a public issue.
 The builtin agent can read visible source, edit configured regular files, fetch
 allowed references and run named operator-configured checks. It cannot introduce
 an arbitrary command through the check tool. The Codex runner instead exposes
-the Codex CLI's coding/shell tools under the configured sandbox; the default is
-`workspace-write`. `danger-full-access` is an explicit option for workers with
-external isolation. Its capabilities differ from the builtin tool allowlist.
+the Codex CLI's coding/shell tools under the configured execution policy. Native
+runs default to `workspace-write`. Version-2 Compose runs explicitly use
+`danger-full-access` with Docker supplying isolation: an unprivileged user,
+read-only root filesystem, temporary home/workspace storage, dropped Linux
+capabilities and no privilege escalation. Explicit YAML sandbox settings take
+precedence. Its capabilities differ from the builtin tool allowlist.
 
 Model output is untrusted. Unknown config fields, hidden paths, traversal,
 symlinks and executable-file changes are rejected from proposals. A fresh job
@@ -33,9 +36,11 @@ its shell environment excludes its API-key variables. These environment rules do
 not isolate credential files or other processes running as the same OS user.
 Use a dedicated account/worker and do not mount unrelated credential stores.
 
-Version-2 configurations allow Codex workspace-write tools to use the worker's
-outbound network by default; explicit `agent.codex.network_access: false` disables
-that access. Proxy and certificate settings are forwarded to project checks and
+Version-2 configurations allow the worker's outbound network by default.
+`agent.codex.network_access` restricts tools when using workspace-write; Docker
+network policy controls access in container isolation mode. A request for
+`network_access: false` selects workspace-write unless YAML explicitly selects a
+different sandbox. Proxy and certificate settings are forwarded to project checks and
 Codex. Proxy credentials are therefore available to those commands. Native HTTP
 clients add a configured CA bundle while retaining certificate verification.
 Private Docker networks are opt-in and use no privileged mode or Docker socket.

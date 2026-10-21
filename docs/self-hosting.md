@@ -68,10 +68,12 @@ DNS/proxies or mount a custom CA bundle. The worker needs outbound connections;
 it publishes no incoming ports.
 
 Set `MAINTAINER_INSTALL_CODEX=false` to omit Codex for a builtin-agent-only image.
-The default Codex sandbox is `workspace-write`; keep it when your runtime supports
-Codex's sandbox. `agent.codex.sandbox: danger-full-access` is an explicit option
-for a worker with external isolation. It grants broader command access inside
-that worker; it does not replace your infrastructure's isolation.
+Native runs default to Codex's `workspace-write` sandbox. For new version-2
+configs, Compose explicitly selects `danger-full-access` inside the unprivileged,
+read-only container, which supplies isolation. This avoids requiring nested user
+namespaces. Explicit YAML sandbox settings take precedence; see the
+[execution boundaries](docker-networking.md#execution-boundaries) before changing
+the container settings.
 
 Containers do not schedule themselves. Trigger the same image from your job
 system, giving it a fresh repository checkout, agent credentials and a writable
