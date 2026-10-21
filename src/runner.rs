@@ -71,6 +71,12 @@ pub fn codex(
         "approval_policy=\"never\"",
         "-c",
         "shell_environment_policy.exclude=[\"CODEX_API_KEY\",\"OPENAI_API_KEY\"]",
+        "-c",
+        if config.agent.codex.network_access {
+            "sandbox_workspace_write.network_access=true"
+        } else {
+            "sandbox_workspace_write.network_access=false"
+        },
         "exec",
         "--ignore-user-config",
         "--ephemeral",

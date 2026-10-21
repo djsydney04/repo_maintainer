@@ -1,0 +1,7 @@
+services:
+  maintainer:
+    networks: [default, private]
+networks:
+  private:
+    external: true
+    name: ${MAINTAINER_PRIVATE_NETWORK:?Set an existing Docker network name}

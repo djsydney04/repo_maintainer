@@ -67,12 +67,14 @@ pub struct Agent {
 pub struct Codex {
     pub binary: String,
     pub sandbox: String,
+    pub network_access: bool,
 }
 impl Default for Codex {
     fn default() -> Self {
         Self {
             binary: text("codex"),
             sandbox: text("workspace-write"),
+            network_access: false,
         }
     }
 }
@@ -364,12 +366,69 @@ impl Config {
         // Reject duplicate keys in the YAML parser before materializing a map.
         // An untyped intermediate preserves quoted strings as strings; the
         // second step enforces exact bool/integer/string types with Serde JSON.
-        let value: serde_json::Value = serde_saphyr::from_str_with_options(raw, options)
+        let mut value: serde_json::Value = serde_saphyr::from_str_with_options(raw, options)
             .context("Invalid YAML/JSON configuration")?;
+        // New configurations use the general worker. Version 1 (including
+        // files without a version) keeps its established Rust/builtin defaults.
+        if value.get("version") == Some(&serde_json::json!(2)) {
+            let root = value
+                .as_object_mut()
+                .context("Expected a configuration object")?;
+            let agent = root
+                .entry("agent")
+                .or_insert_with(|| serde_json::json!({}))
+                .as_object_mut()
+                .context("agent must be an object")?;
+            agent
+                .entry("runner")
+                .or_insert_with(|| serde_json::json!("codex"));
+            let codex = agent
+                .entry("codex")
+                .or_insert_with(|| serde_json::json!({}))
+                .as_object_mut()
+                .context("agent.codex must be an object")?;
+            codex
+                .entry("network_access")
+                .or_insert_with(|| serde_json::json!(true));
+            let validation = root
+                .entry("validation")
+                .or_insert_with(|| serde_json::json!({}))
+                .as_object_mut()
+                .context("validation must be an object")?;
+            validation
+                .entry("profile")
+                .or_insert_with(|| serde_json::json!("custom"));
+            if validation.get("profile") == Some(&serde_json::json!("custom")) {
+                validation.entry("checks").or_insert_with(|| {
+                    serde_json::json!([{
+                        "name":"whitespace", "command":["git","diff","--check"],
+                        "timeout_seconds":60
+                    }])
+                });
+            }
+            let editable = root
+                .entry("editable")
+                .or_insert_with(|| serde_json::json!({}))
+                .as_object_mut()
+                .context("editable must be an object")?;
+            for (name, default) in [
+                ("root_files", serde_json::json!(["README.md"])),
+                ("markdown_dirs", serde_json::json!(["docs"])),
+                ("source_dirs", serde_json::json!(["src", "tests", "crates"])),
+                (
+                    "extensions",
+                    serde_json::json!([
+                        ".rs", ".py", ".js", ".jsx", ".ts", ".tsx", ".go", ".md", ".json"
+                    ]),
+                ),
+            ] {
+                editable.entry(name).or_insert(default);
+            }
+        }
         let mut config: Self =
             serde_json::from_value(value).context("Invalid configuration fields")?;
         ensure!(
-            config.version == 1,
+            [1, 2].contains(&config.version),
             "Unsupported maintainer configuration version"
         );
         strings(&config.sources, true)?;

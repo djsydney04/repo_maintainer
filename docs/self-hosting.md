@@ -46,7 +46,8 @@ Use `runner_labels: '["ubuntu-latest"]'` for GitHub-hosted execution instead.
 
 ## Docker with your project's tools
 
-The default image includes the maintainer, native Codex CLI and Rust check tools.
+The default Debian image includes the maintainer, native Codex CLI, GitHub CLI,
+Python and build tools. New configs select the general Codex worker by default.
 Select a Debian-based runtime image for another project. For a Node repository:
 
 ```sh
@@ -60,6 +61,11 @@ needs no Cargo toolchain at runtime. Python and Go base images work the same way
 include whatever tools your configured commands require. Debian-based images
 with `apt-get` are supported by this Dockerfile. Custom images can also copy the
 native executable and install tools independently.
+
+Use `rust:1.89-slim-bookworm` for the bundled Rust validation profile. See
+[Docker networking](docker-networking.md) to attach private services, configure
+DNS/proxies or mount a custom CA bundle. The worker needs outbound connections;
+it publishes no incoming ports.
 
 Set `MAINTAINER_INSTALL_CODEX=false` to omit Codex for a builtin-agent-only image.
 The default Codex sandbox is `workspace-write`; keep it when your runtime supports

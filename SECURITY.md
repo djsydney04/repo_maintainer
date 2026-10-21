@@ -33,6 +33,13 @@ its shell environment excludes its API-key variables. These environment rules do
 not isolate credential files or other processes running as the same OS user.
 Use a dedicated account/worker and do not mount unrelated credential stores.
 
+Version-2 configurations allow Codex workspace-write tools to use the worker's
+outbound network by default; explicit `agent.codex.network_access: false` disables
+that access. Proxy and certificate settings are forwarded to project checks and
+Codex. Proxy credentials are therefore available to those commands. Native HTTP
+clients add a configured CA bundle while retaining certificate verification.
+Private Docker networks are opt-in and use no privileged mode or Docker socket.
+
 Local Docker runs mount the target read-only and operate on its committed HEAD in a
 temporary clone. Only proposal artifacts are returned. GitHub publishing is an
 explicit workflow command in a separate job with write permissions. The project

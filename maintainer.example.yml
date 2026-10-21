@@ -1,5 +1,5 @@
 # Copy to .maintainer.yml in the repository you want to maintain.
-version: 1
+version: 2
 name: Repository maintenance
 agent:
   runner: codex                # codex or builtin (direct model APIs)
@@ -9,6 +9,7 @@ agent:
   # codex:
   #   binary: codex             # Executable on PATH, or an absolute path.
   #   sandbox: workspace-write
+  #   network_access: true      # Outbound access for tools inside the sandbox.
 
 instructions: |
   Inspect this repository for a small, useful maintenance improvement.

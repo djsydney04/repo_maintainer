@@ -15,4 +15,13 @@ fi
 export MAINTAINER_OUTPUT_PATH="${MAINTAINER_OUTPUT_PATH:-$REPOSITORY_PATH/.maintainer-output}"
 mkdir -p -- "$MAINTAINER_OUTPUT_PATH"
 if [[ $# -eq 0 ]]; then set -- check; fi
-exec docker compose --project-directory "$maintainer_root" -f "$maintainer_root/compose.yml" run --build --rm maintainer "$@" --output "/output/$(date +%s)-$$"
+compose_files=(-f "$maintainer_root/compose.yml")
+if [[ -n "${MAINTAINER_COMPOSE_FILES:-}" ]]; then
+  IFS=: read -r -a maintainer_overrides <<< "$MAINTAINER_COMPOSE_FILES"
+  for override in "${maintainer_overrides[@]}"; do
+    if [[ "$override" != /* ]]; then override="$maintainer_root/$override"; fi
+    [[ -f "$override" ]] || { echo "Compose override not found: $override" >&2; exit 2; }
+    compose_files+=(-f "$override")
+  done
+fi
+exec docker compose --project-directory "$maintainer_root" "${compose_files[@]}" run --build --rm maintainer "$@" --output "/output/$(date +%s)-$$"

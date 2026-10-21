@@ -3,7 +3,7 @@ services:
     build:
       context: .
       args:
-        RUNTIME_IMAGE: ${MAINTAINER_RUNTIME_IMAGE:-rust:1.89-slim-bookworm}
+        RUNTIME_IMAGE: ${MAINTAINER_RUNTIME_IMAGE:-debian:bookworm-slim}
         INSTALL_CODEX: ${MAINTAINER_INSTALL_CODEX:-true}
     user: "${MAINTAINER_UID:-1000}:${MAINTAINER_GID:-1000}"
     init: true
@@ -17,6 +17,16 @@ services:
       SDK_MAINTENANCE_API_KEY: ${SDK_MAINTENANCE_API_KEY:-}
       MAINTENANCE_API_KEY: ${MAINTENANCE_API_KEY:-}
       CODEX_API_KEY: ${CODEX_API_KEY:-}
+      HTTP_PROXY: ${HTTP_PROXY:-${http_proxy:-}}
+      HTTPS_PROXY: ${HTTPS_PROXY:-${https_proxy:-}}
+      ALL_PROXY: ${ALL_PROXY:-${all_proxy:-}}
+      NO_PROXY: ${NO_PROXY:-${no_proxy:-}}
+      http_proxy: ${http_proxy:-${HTTP_PROXY:-}}
+      https_proxy: ${https_proxy:-${HTTPS_PROXY:-}}
+      all_proxy: ${all_proxy:-${ALL_PROXY:-}}
+      no_proxy: ${no_proxy:-${NO_PROXY:-}}
+    extra_hosts:
+      - host.docker.internal:host-gateway
     volumes:
       - type: bind
         source: ${REPOSITORY_PATH:-.}

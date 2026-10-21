@@ -1,0 +1,4 @@
+services:
+  maintainer:
+    dns:
+      - ${MAINTAINER_DNS_SERVER:?Set your reachable private DNS server}

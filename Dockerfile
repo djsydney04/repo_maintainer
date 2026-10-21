@@ -1,4 +1,4 @@
-ARG RUNTIME_IMAGE=rust:1.89-slim-bookworm
+ARG RUNTIME_IMAGE=debian:bookworm-slim
 FROM rust:1.89-slim-bookworm AS build
 WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
@@ -9,7 +9,7 @@ RUN cargo build --release --locked
 FROM ${RUNTIME_IMAGE}
 ARG INSTALL_CODEX=true
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git curl ca-certificates build-essential pkg-config \
+    git gh curl ca-certificates python3 build-essential pkg-config \
     && rm -rf /var/lib/apt/lists/* \
     && if command -v rustup >/dev/null; then \
          rustup toolchain install stable --profile minimal --component rustfmt --component clippy \

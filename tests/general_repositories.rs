@@ -69,6 +69,7 @@ for argument in "$@"; do
   previous="$argument"
 done
 test -f "$schema"
+case " $* " in *' sandbox_workspace_write.network_access=true '*) ;; *) exit 3;; esac
 grep -q 'Fix the broken value' </dev/stdin
 printf 'fixed\n' > src/value.txt
 {}
@@ -78,7 +79,7 @@ printf '%s\n' '{{"status":"changed","summary":"Repaired fixture-key","sources":[
             ),
         );
         let config = temp.path().join("config.yml");
-        fs::write(&config, json!({"instructions":"Fix the broken value", "agent":{"runner":"codex", "allow_paid":true,"timeout_seconds":if pause {1}else{30},"codex":{"binary":fake}},"editable":{"source_dirs":["src"],"extensions":[".txt"]},"validation":{"profile":"custom","checks":[{"name":"contract","command":["sh","-c","test \"$(cat src/value.txt)\" = fixed"]}]}}).to_string()).unwrap();
+        fs::write(&config, json!({"version":2,"instructions":"Fix the broken value", "agent":{"allow_paid":true,"timeout_seconds":if pause {1}else{30},"codex":{"binary":fake}},"editable":{"source_dirs":["src"],"extensions":[".txt"]},"validation":{"profile":"custom","checks":[{"name":"contract","command":["sh","-c","test \"$(cat src/value.txt)\" = fixed"]}]}}).to_string()).unwrap();
         let output = temp.path().join("proposal");
         Self {
             _temp: temp,

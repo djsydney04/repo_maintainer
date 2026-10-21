@@ -85,13 +85,17 @@ Choose the project runtime with `MAINTAINER_RUNTIME_IMAGE`, such as
 API request, and `run` reads committed HEAD through a read-only mount. Review
 its report and patch in `.maintainer-output/<run>/`.
 
+The default worker is language-independent and includes Git, GitHub CLI, Python
+and build tools. [Private networking, proxies, DNS and custom CA bundles](docs/docker-networking.md)
+are supported on your infrastructure. No inbound port is needed.
+
 For hosted PRs, follow the **[weekly cloud setup](docs/getting-started.md#weekly-cloud-maintenance)**.
 For direct image/Compose commands, see **[local Docker setup](docs/getting-started.md#local-docker-runs)**.
 
 ## One YAML file
 
 ```yaml
-version: 1
+version: 2
 agent:
   runner: codex
   allow_paid: true

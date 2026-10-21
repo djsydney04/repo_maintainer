@@ -1,9 +1,14 @@
 name: Maintainer checks
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: maintainer-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   rust:
     name: Rust (${{ matrix.os }}, ${{ matrix.toolchain }})
@@ -34,7 +39,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runtime: [rust, node]
+        runtime: [generic, rust, node]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -45,7 +50,8 @@ jobs:
         env:
           RUNTIME: ${{ matrix.runtime }}
         run: |
-          runtime_image=rust:1.89-slim-bookworm
+          runtime_image=debian:bookworm-slim
+          if [ "$RUNTIME" = rust ]; then runtime_image=rust:1.89-slim-bookworm; fi
           if [ "$RUNTIME" = node ]; then runtime_image=node:24-bookworm; fi
           docker build --build-arg "RUNTIME_IMAGE=$runtime_image" --tag repo-maintainer:test .
       - name: Validate YAML without an API key
@@ -57,6 +63,15 @@ jobs:
           docker run --rm --entrypoint cargo repo-maintainer:test fmt --version
       - name: Verify Codex's native binary
         run: docker run --rm --entrypoint codex repo-maintainer:test --version
+      - name: Verify the default worker's private networking and TLS
+        if: matrix.runtime == 'generic'
+        run: python3 scripts/container-network-smoke.py
+      - name: Validate optional networking overlays
+        env:
+          MAINTAINER_PRIVATE_NETWORK: fixture-private-network
+          MAINTAINER_CA_BUNDLE: /tmp/fixture-ca-bundle.pem
+          MAINTAINER_DNS_SERVER: 10.0.0.53
+        run: docker compose -f compose.yml -f compose.private-network.yml -f compose.ca.yml -f compose.dns.yml config --quiet
       - name: Verify a Node worker without Cargo
         if: matrix.runtime == 'node'
         run: |

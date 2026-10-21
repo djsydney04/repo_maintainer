@@ -9,7 +9,7 @@ unsafe paths and excessive budgets fail validation.
 ## A repository task
 
 ```yaml
-version: 1
+version: 2
 name: Application maintenance
 agent:
   runner: codex
@@ -41,16 +41,21 @@ YAML alias expansion is bounded.
 
 | Field | Schema default | Meaning |
 | --- | --- | --- |
-| `agent.runner` | `builtin` | `codex` launches the Codex CLI; `builtin` uses the Rust agent with a model API |
+| `agent.runner` | `codex` in version 2 | `codex` launches the Codex CLI; `builtin` uses the Rust agent with a model API |
 | `agent.model` | Runner/provider default | Optional model ID; omitted for Codex to use its CLI default |
 | `agent.allow_paid` | `false` | Explicit account-usage opt-in; required for Codex, OpenAI and Anthropic |
 | `agent.timeout_seconds` | `1200` | Agent wall-clock limit, from 1 through 3600 seconds |
 | `agent.max_requests` | `16` | Builtin inference budget, from 1 through 16, including compaction; does not limit Codex turns |
 | `agent.codex.binary` | `codex` | Worker-owned executable on PATH or an absolute path |
 | `agent.codex.sandbox` | `workspace-write` | `read-only`, `workspace-write`, or explicit `danger-full-access` for externally isolated workers |
+| `agent.codex.network_access` | `true` in version 2 | Allow outbound access for workspace-write tools; explicit `false` restricts it |
 
-The new `init` template selects Codex and custom checks. Existing files that omit
-`runner` or `validation` keep the builtin runner and Rust profile.
+`init` writes version 2. If omitted there, `agent.runner` is Codex, validation is
+a generic whitespace check, and editable paths include common source/test
+extensions. Account use still requires `agent.allow_paid: true`. Configure the
+project's actual checks before unattended work. Version 1, including files with
+no version field, retains its builtin runner, Rust validation and restricted
+Codex tool networking defaults. Explicit settings always take precedence.
 
 ### Codex CLI
 
@@ -104,7 +109,7 @@ The Codex runner uses its own authentication; provider selection is for builtin.
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `version` | `1` | Configuration format |
+| `version` | `2` in new files; absent means legacy `1` | Configuration format |
 | `name` | `Repository maintenance` | Short display name |
 | `instructions` | Focused maintenance task | Task text, at most 16,000 characters |
 | `instructions_file` | Unset | Repository-relative file appended to the task |
@@ -186,9 +191,9 @@ editable:
 ```
 
 Root files are exact names. Source directories allow the selected extensions
-recursively; Markdown directories allow immediate `.md` children. The schema
-keeps its previous Rust-oriented defaults for compatibility; the init template
-and examples explicitly specify broader paths. Allow manifests/lockfiles only
+recursively; Markdown directories allow immediate `.md` children. Version 2
+defaults cover `src/`, `tests/` and `crates/` with common language extensions;
+version 1 keeps the original Rust-oriented defaults. Allow manifests/lockfiles only
 when the task should change them. Hidden paths, traversal, symlinks and executable
 files cannot enter a proposal. Patches stay within 25 regular files and 500 KB.
 
