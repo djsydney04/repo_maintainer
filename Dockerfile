@@ -11,7 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && rustup toolchain install stable --profile minimal --component rustfmt --component clippy \
     && rustup default stable \
-    && useradd --create-home --uid 1000 maintainer
+    && useradd --create-home --uid 1000 maintainer \
+    && dpkg --compare-versions \
+        "$(dpkg-query --show --showformat='${Version}' ca-certificates)" ge '20250419~deb12u2'
 COPY --from=build /build/target/release/repo-maintainer /usr/local/bin/repo-maintainer
 ENV CARGO_HOME=/tmp/maintainer-cargo HOME=/tmp/maintainer-home
 USER maintainer
