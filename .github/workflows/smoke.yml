@@ -1,0 +1,47 @@
+name: Live Pi repair diagnostic
+on:
+  workflow_call:
+    inputs:
+      maintainer_ref:
+        required: true
+        type: string
+      provider:
+        type: string
+        default: google
+      model:
+        type: string
+        default: ''
+    secrets:
+      GEMINI_API_KEY:
+        required: false
+      GROQ_API_KEY:
+        required: false
+      SDK_MAINTENANCE_API_KEY:
+        required: false
+permissions:
+  contents: read
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: djsydney04/repo_maintainer
+          ref: ${{ inputs.maintainer_ref }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - run: npm ci --prefix agent --ignore-scripts --no-audit --no-fund
+      - run: rustup toolchain install stable --profile minimal
+      - run: rustup default stable
+      - run: rustup component add rustfmt clippy
+      - name: Verify real inference, editing and offline Rust repair
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          SDK_MAINTENANCE_API_KEY: ${{ secrets.SDK_MAINTENANCE_API_KEY }}
+          MAINTENANCE_PROVIDER: ${{ inputs.provider }}
+          MAINTENANCE_MODEL: ${{ inputs.model }}
+        run: python3 scripts/maintain.py smoke --artifacts "$RUNNER_TEMP/smoke"

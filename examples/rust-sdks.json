@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "name": "Prism SDK maintenance",
+  "official_hosts": [
+    "developers.openai.com",
+    "platform.openai.com",
+    "ai.google.dev",
+    "console.groq.com"
+  ],
+  "sources": [
+    "https://developers.openai.com/api/docs/changelog",
+    "https://developers.openai.com/api/reference/overview",
+    "https://ai.google.dev/gemini-api/docs/changelog",
+    "https://ai.google.dev/api/all-methods",
+    "https://console.groq.com/docs/changelog",
+    "https://console.groq.com/docs/api-reference"
+  ],
+  "instructions_file": ".github/maintenance/prompt.md",
+  "branch_prefix": "dylan/sdk-maintenance-",
+  "issue_title": "SDK maintenance needs help",
+  "commit_title": "fix: align SDKs with provider documentation",
+  "ci_workflow": "ci.yml",
+  "editable": {
+    "root_files": [
+      "README.md"
+    ],
+    "markdown_dirs": [
+      "docs"
+    ],
+    "source_dirs": [
+      "crates/core",
+      "crates/openai",
+      "crates/gemini",
+      "crates/groq"
+    ],
+    "extensions": [
+      ".rs",
+      ".md",
+      ".json"
+    ]
+  },
+  "rust": {
+    "msrv": "1.88.0",
+    "crates": [
+      "prism-ai-core",
+      "prism-openai",
+      "prism-gemini",
+      "prism-groq"
+    ],
+    "package_check": "scripts/verify-packages.py"
+  }
+}

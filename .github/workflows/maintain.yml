@@ -1,0 +1,236 @@
+name: Reusable repository maintenance
+on:
+  workflow_call:
+    inputs:
+      maintainer_ref:
+        description: Exact repo_maintainer commit (same SHA as the caller's uses reference)
+        required: true
+        type: string
+      config_path:
+        type: string
+        default: .github/maintainer.json
+      provider:
+        type: string
+        default: google
+      model:
+        type: string
+        default: ''
+      owner:
+        type: string
+        default: ''
+    secrets:
+      GEMINI_API_KEY:
+        required: false
+      GROQ_API_KEY:
+        required: false
+      SDK_MAINTENANCE_API_KEY:
+        required: false
+permissions:
+  contents: read
+concurrency:
+  group: weekly-sdk-maintenance
+  cancel-in-progress: false
+env:
+  DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+  MAINTENANCE_OWNER: ${{ inputs.owner || github.repository_owner }}
+  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+  MAINTENANCE_PROVIDER: ${{ inputs.provider }}
+  MAINTENANCE_MODEL: ${{ inputs.model }}
+  MAINTENANCE_CONFIG: ${{ github.workspace }}/consumer/${{ inputs.config_path }}
+  MAINTENANCE_REPOSITORY_ROOT: ${{ github.workspace }}/consumer
+jobs:
+  propose:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+    outputs:
+      sha: ${{ steps.prepare.outputs.sha }}
+      status: ${{ steps.collect.outputs.status }}
+      msrv: ${{ steps.prepare.outputs.msrv }}
+      package_check: ${{ steps.prepare.outputs.package_check }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: djsydney04/repo_maintainer
+          ref: ${{ inputs.maintainer_ref }}
+          path: automation
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: consumer
+          persist-credentials: false
+      - name: Read official docs and existing maintenance feedback
+        id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python3 automation/scripts/maintain.py prepare
+          --artifacts "$RUNNER_TEMP/proposal"
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        id: source
+        with:
+          ref: ${{ steps.prepare.outputs.sha }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - name: Install the coding agent and Rust check tools
+        run: |
+          npm ci --prefix automation/agent --ignore-scripts --no-audit --no-fund
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup component add rustfmt clippy
+          cargo fetch --manifest-path source/Cargo.toml --locked
+      - name: Inspect, edit, test and repair using Pi
+        id: agent
+        working-directory: source
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          SDK_MAINTENANCE_API_KEY: ${{ secrets.SDK_MAINTENANCE_API_KEY }}
+        run: |
+          status=0
+          timeout --kill-after=30s 20m node ../automation/agent/agent.mjs \
+            "$RUNNER_TEMP/proposal/brief.md" \
+            > "$RUNNER_TEMP/pi-result.json" 2> "$RUNNER_TEMP/pi-stderr.log" || status=$?
+          echo "exit-code=$status" >> "$GITHUB_OUTPUT"
+      - name: Verify the proposal boundary and structured result
+        id: collect
+        if: always() && steps.agent.outcome == 'success'
+        env:
+          AGENT_EXIT_CODE: ${{ steps.agent.outputs.exit-code }}
+        run: >-
+          python3 automation/scripts/maintain.py collect
+          --source source --artifacts "$RUNNER_TEMP/proposal"
+          --raw "$RUNNER_TEMP/pi-result.json" --exit-code "$AGENT_EXIT_CODE"
+      - name: Retain completed or partial proposals
+        if: always() && steps.prepare.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sdk-maintenance-proposal
+          path: |
+            ${{ runner.temp }}/proposal/request.json
+            ${{ runner.temp }}/proposal/report.json
+            ${{ runner.temp }}/proposal/proposal.patch
+          retention-days: 30
+          if-no-files-found: error
+  validate:
+    needs: propose
+    if: needs.propose.outputs.status == 'changed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: djsydney04/repo_maintainer
+          ref: ${{ inputs.maintainer_ref }}
+          path: automation
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: consumer
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.propose.outputs.sha }}
+          path: source
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: sdk-maintenance-proposal
+          path: ${{ runner.temp }}/proposal
+      - run: python3 automation/scripts/maintain.py apply --source source --artifacts "$RUNNER_TEMP/proposal"
+      - name: Install validation tools
+        env:
+          RUST_MSRV: ${{ needs.propose.outputs.msrv }}
+        run: |
+          rustup toolchain install stable "$RUST_MSRV" --profile minimal
+          rustup default stable
+          rustup component add rustfmt clippy
+          cargo install cargo-audit --version 0.22.2 --locked
+      - name: Run the Linux CI checks against the proposed changes
+        working-directory: source
+        env:
+          RUSTDOCFLAGS: -D warnings
+          RUST_MSRV: ${{ needs.propose.outputs.msrv }}
+          PACKAGE_CHECK: ${{ needs.propose.outputs.package_check }}
+        run: |
+          cargo fmt --all --check
+          cargo test --workspace --all-targets --locked
+          cargo test --workspace --doc --locked
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo doc --workspace --no-deps --locked
+          cargo "+$RUST_MSRV" check --workspace --all-targets --locked
+          python3 "$PACKAGE_CHECK"
+          cargo audit --deny warnings
+  publish:
+    needs: [propose, validate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: djsydney04/repo_maintainer
+          ref: ${{ inputs.maintainer_ref }}
+          path: automation
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: consumer
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.propose.outputs.sha }}
+          path: source
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: sdk-maintenance-proposal
+          path: ${{ runner.temp }}/proposal
+      - name: Open or update a PR and dispatch full CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 automation/scripts/maintain.py publish --source source --artifacts "$RUNNER_TEMP/proposal"
+  notify:
+    needs: [propose, validate, publish]
+    if: always() && github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: djsydney04/repo_maintainer
+          ref: ${{ inputs.maintainer_ref }}
+          path: automation
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: consumer
+          persist-credentials: false
+      - name: Read the report if one was produced
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: sdk-maintenance-proposal
+          path: ${{ runner.temp }}/proposal
+      - name: Notify only for a new blocker or a recovered run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROPOSE_RESULT: ${{ needs.propose.result }}
+          VALIDATE_RESULT: ${{ needs.validate.result }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
+        run: python3 automation/scripts/maintain.py notify --artifacts "$RUNNER_TEMP/proposal"
