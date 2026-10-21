@@ -41,8 +41,11 @@ with tempfile.TemporaryDirectory() as temporary:
 import http.server, select, socket, ssl, threading
 class Reference(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
-        self.send_response(200); self.end_headers()
-        self.wfile.write(("<main>A private service reference for network verification. " * 12 + "</main>").encode())
+        body = ("<main>A private service reference for network verification. " * 12 + "</main>").encode()
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
     def log_message(self, *args): pass
 class Proxy(http.server.BaseHTTPRequestHandler):
     def do_CONNECT(self):

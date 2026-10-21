@@ -114,7 +114,7 @@ Codex keeps `workspace-write` by default. Set `agent.codex.network_access: false
 to block tool networking inside that sandbox. Workers whose runtime cannot run
 the nested sandbox must be configured explicitly for an externally isolated
 execution mode; no silent sandbox fallback occurs. See
-[Codex's network configuration](https://learn.chatgpt.com/docs/config-file/config-reference#sandbox_workspace_writenetwork_access).
+[Codex's network configuration](https://learn.chatgpt.com/docs/config-file/config-reference).
 
 `run` produces local proposal artifacts. Use the existing self-hosted PR workflow
 or separate [pipeline stages](self-hosting.md#compose-the-stages-in-code) when
