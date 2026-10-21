@@ -23,4 +23,4 @@ editable:
 rust:
   msrv: 1.88.0
   # crates: [my-sdk]           # Optional names for checks scoped to a package.
-  # package_check: scripts/verify-packages.py
+  # package_check: scripts/verify-packages

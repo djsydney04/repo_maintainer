@@ -1,50 +1,86 @@
-# repo_maintainer
+# Repo Maintainer
 
-A reusable Pi coding agent that checks official docs, makes focused maintenance
-changes, validates them, and opens pull requests. It runs weekly on GitHub
-Actions or generates a reviewable patch locally with Docker.
+[![Maintainer checks](https://github.com/djsydney04/repo_maintainer/actions/workflows/ci.yml/badge.svg)](https://github.com/djsydney04/repo_maintainer/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Rust: 1.89+](https://img.shields.io/badge/rust-1.89%2B-orange.svg)](Cargo.toml)
 
-**Configure everything in `.maintainer.yml`.** Choose Groq, Gemini, OpenAI or
-Anthropic; API keys stay in environment variables or GitHub Actions secrets.
-The initial validation profile supports Rust SDK workspaces.
+A Rust maintenance agent that reads official documentation, makes focused fixes,
+validates them, and opens pull requests. Run it weekly through GitHub Actions or
+produce a reviewable patch locally with Docker or a native binary.
 
-## Quick start with Docker
+Configure the target repository in **`.maintainer.yml`**. Choose Groq, Gemini,
+OpenAI or Anthropic; keep API keys in environment variables or Actions secrets.
+The built-in validation profile supports Rust repositories and SDK workspaces.
 
-Clone this repository beside the repository you want to maintain. From the
-**repository you want to maintain**, run:
+```mermaid
+flowchart LR
+    Docs[Official docs] --> Agent[Rust agent]
+    Repo[Committed source] --> Agent
+    Agent --> Patch[Bounded proposal patch]
+    Patch --> Validate[Fresh validation job]
+    Validate --> Publish[Separate publishing job]
+    Publish --> PR[Pull request for human review]
+```
+
+The maintainer is implemented entirely in Rust. The native binary and default
+Docker image need no Python or Node runtime. A maintained repository's optional
+package-check script may have its own runtime requirements.
+
+## Native quick start
+
+Install Rust 1.89 or newer and Git, then clone and install:
+
+```sh
+git clone https://github.com/djsydney04/repo_maintainer.git
+cd repo_maintainer
+cargo install --locked --path .
+cd /path/to/your/rust-repository
+repo-maintainer init
+# Edit .maintainer.yml with your official docs and selected provider.
+repo-maintainer check
+# Export the selected provider's API key before running inference.
+repo-maintainer run
+```
+
+`init` preserves existing settings. `check` validates configuration without API
+requests. `run` clones the target's committed HEAD into a temporary directory,
+fetches its locked Cargo dependencies, and edits the clone. The working tree is
+not changed. Review `.maintainer-output/<run>/report.json` and `proposal.patch`.
+Use `--output /path/to/new/directory` to select an empty output directory.
+
+Native runs use your shell environment; `.env` is loaded only by Docker Compose.
+Local `run` does not publish a pull request.
+
+## Docker quick start
+
+Clone this project beside the target repository. From the target repository:
 
 ```sh
 ../repo_maintainer/maintainer init
-# Edit .maintainer.yml with your documentation sources and provider.
+# Edit .maintainer.yml, then set your provider key in the shell or shared .env.
 ../repo_maintainer/maintainer check
 ../repo_maintainer/maintainer run
 ```
 
-The wrapper builds the image, handles your user ID and output directory, and
-uses Docker Compose. Docker with the Compose plugin is the only host dependency.
-`init` never overwrites existing settings; `check` makes no API request.
-`run` requires the selected API key in your shell environment or the shared
-repository's ignored `.env` file (copy `.env.example`). It uses the target
-repository's committed HEAD. The target is mounted read-only, and proposals are
-written to `.maintainer-output/<run>/report.json` and `proposal.patch` for review.
-It does not publish a PR from your computer; the cloud workflow below validates
-and publishes PRs using separate jobs.
+Docker with the Compose plugin is the only host dependency. The wrapper builds
+the image and handles user IDs and output mounts. Copy this project's
+[.env.example](.env.example) to `.env` for local keys; never commit real values.
+The target is mounted read-only, and `.maintainer-output/<run>/` receives the
+proposal. The image includes Rust, rustfmt, Clippy and Git for source checks.
 
 For direct Compose use from this checkout:
 
 ```sh
 REPOSITORY_PATH=/path/to/repository MAINTAINER_OUTPUT_PATH=/path/to/output \
-  docker compose run --build --rm maintainer check
+  docker compose run --build --rm maintainer run --output /output/new-run
 ```
 
-You can also build `Dockerfile` and run the image directly, mounting the target
-at `/repository` read-only and an output directory at `/output`. Use `check`,
-`run`, or `smoke`. Docker itself does not create a weekly schedule.
+Docker does not schedule recurring maintenance. Use the reusable workflow below
+or your own scheduler.
 
-## One YAML file
+## Configuration
 
-Start with [maintainer.example.yml](maintainer.example.yml). Most fields have
-safe defaults; a minimal configuration is:
+Start with [maintainer.example.yml](maintainer.example.yml). A minimal config is:
 
 ```yaml
 version: 1
@@ -57,50 +93,47 @@ instructions: |
   Preserve public APIs and add offline tests for behavior changes.
 ```
 
-Docs hosts are inferred from the source URLs. By default, edits may touch
-`README.md`, Markdown files in `docs/`, and Rust/Markdown/JSON files in `src/`
-and `crates/`. Customize those paths and Rust checks as shown in the example.
-Inline `instructions` replaces the need for a separate prompt file. Existing
-version-1 JSON configurations and `instructions_file` remain supported.
-Unknown fields, duplicate keys, unsafe paths and oversized budgets produce
-configuration errors. API keys are not accepted in YAML.
+Documentation hosts are inferred from `sources`; `official_hosts` can extend
+that allowlist. Redirects are checked before following them. By default, edits
+may touch `README.md`, Markdown files directly in `docs/`, and Rust/Markdown/JSON
+files under `src/` and `crates/`. Customize `editable` and `rust` in the example.
 
-To use OpenAI or Anthropic, change only the agent section:
+Version-1 JSON configs and `instructions_file` remain supported. Configuration
+is discovered in `.maintainer.yml`, `.maintainer.yaml`, or `.github/maintainer`
+with a `.yml`, `.yaml` or `.json` extension. Use `--config PATH` for an explicit
+file. Unknown fields, duplicate keys, unsafe paths and excessive budgets fail
+validation. YAML cannot contain API keys.
+
+| Provider | Default model | Key environment variable / Actions secret | Protocol |
+| --- | --- | --- | --- |
+| `groq` | `openai/gpt-oss-120b` | `GROQ_API_KEY` | Chat Completions |
+| `google` | `gemini-3.8-flash` | `GEMINI_API_KEY` | generateContent |
+| `openai` (or `oai`) | `gpt-5.4` | `OPENAI_API_KEY` | Responses |
+| `anthropic` | `claude-sonnet-4-6` | `ANTHROPIC_API_KEY` | Messages |
+
+The Rust agent calls native HTTP APIs directly. Model IDs retain the previous
+configuration defaults; they are examples rather than aliases for the latest
+models. Actual access, price and quotas depend on your provider account.
+
+OpenAI and Anthropic require an explicit paid-provider opt-in:
 
 ```yaml
 agent:
-  provider: openai             # or anthropic
-  model: gpt-5.4               # e.g. claude-sonnet-4-6 for Anthropic
+  provider: openai
+  model: gpt-5.4
   allow_paid: true
   max_requests: 16
 ```
 
-| Provider | Default model | API key environment/secret |
-| --- | --- | --- |
-| `groq` | `openai/gpt-oss-120b` | `GROQ_API_KEY` |
-| `google` | `gemini-3.8-flash` | `GEMINI_API_KEY` |
-| `openai` (or `oai`) | `gpt-5.4` | `OPENAI_API_KEY` |
-| `anthropic` | `claude-sonnet-4-6` | `ANTHROPIC_API_KEY` |
+Groq and Gemini can also incur charges with a billed account. No provider, model
+or key fallback occurs. `SDK_MAINTENANCE_API_KEY` overrides the selected provider's
+named key. Optional environment overrides are `MAINTENANCE_PROVIDER`,
+`MAINTENANCE_MODEL` and `MAINTENANCE_ALLOW_PAID` (`true` or `false`). Changing the
+provider selects its own default model unless a model override is also supplied.
 
-OpenAI uses the native Responses API SDK adapter; Anthropic uses the native
-Messages API SDK adapter, both through pinned Pi 1.3.0. Other OpenAI/Anthropic
-model IDs can be selected when present in that Pi catalog. The defaults are
-examples, not dynamic aliases for the newest models.
+## Weekly pull requests
 
-Google also accepts `gemini-3.6-flash` and `gemini-3.5-flash-lite`; Groq also
-accepts `qwen/qwen3.8-27b`. The optional `SDK_MAINTENANCE_API_KEY` secret overrides
-the selected provider's named key. Replace a secret to change keys.
-
-OpenAI and Anthropic require explicit `allow_paid: true`. The maintainer never
-switches providers or keys automatically. Groq needs a free-plan organization
-and Gemini needs an unbilled AI Studio project for free-only usage; a billed
-account can incur charges even when using the same model ID. Pi does not
-increase account quotas. Keys in the same Google project or Groq organization
-share limits.
-
-## Weekly cloud pull requests
-
-Commit `.maintainer.yml` in the target repository, then add a small caller:
+Commit `.maintainer.yml` in the consuming repository and add a caller workflow:
 
 ```yaml
 name: Weekly maintenance
@@ -130,61 +163,74 @@ jobs:
       SDK_MAINTENANCE_API_KEY: ${{ secrets.SDK_MAINTENANCE_API_KEY }}
 ```
 
-Pin both references to the same full commit SHA. Add keys in the **consuming
-repository's** Actions secrets; this shared repository needs no copy. Enable
-Actions to create pull requests, merge your caller/configuration, run manually
-once and review the outcome. GitHub schedules may be delayed.
+Replace both `FULL_COMMIT_SHA` values with the same reviewed maintainer commit.
+Keys belong in the **consuming repository's** Actions secrets. Enable Actions to
+create pull requests, merge the caller/config, run it manually once, and inspect
+the outcome. Schedules may be delayed. Optional workflow inputs override
+`provider`, `model`, `allow_paid` and the assigned `owner`.
 
-Optional `provider` and `model` workflow inputs override YAML for one run. A paid
-provider still needs YAML opt-in or the `allow_paid` workflow input. Existing
-`MAINTENANCE_PROVIDER`, `MAINTENANCE_MODEL` and `MAINTENANCE_ALLOW_PAID`
-environment overrides are also understood by the local runner.
+The proposal job has read-only GitHub access. The agent receives bounded read,
+edit, write, search, official-reference and offline Cargo-check tools. It loads
+no repository plugins or shell tools. Credentials and process-wrapper settings
+are removed from child check environments.
 
-## Boundaries and notifications
+A fresh job applies the exact patch and runs formatting, workspace tests and
+doctests, Clippy, rustdoc, the configured Rust minimum, an optional package-check
+script, and dependency audit. A separate job publishes only after validation,
+updates or opens one assigned PR, and dispatches the target's CI workflow. The
+CI workflow must support `workflow_dispatch`. An existing maintenance PR is
+continued from its current head without force pushing.
 
-The proposal job has a read-only GitHub token. Pi can read/edit configured files,
-fetch configured official references and run bounded offline Rust checks. It
-loads no repository plugins, shell tools or subagents. Provider keys are removed
-from the process environment before source tools and checks run.
+`rust.package_check`, when set, names an executable in the consuming repository.
+It must provide its own interpreter or be a compiled program; the maintainer
+does not select a language runtime. The default has no package-check executable.
 
-A fresh job validates the exact patch with formatting, workspace tests/doctests,
-Clippy, rustdoc, the configured Rust minimum, the optional package verification
-script, and dependency audit. Only then does a separate job get write access to
-open/update one assigned PR and dispatch the repository's CI. The bot never
-merges, force pushes or releases. Patches are limited to 25 regular files and
-500 KB. Dependencies, automation and release changes require human help.
+New blockers update one assigned issue. Identical blockers and successful no-ops
+stay quiet; successful recovery closes the issue. Proposal artifacts are retained
+for 30 days. Maintained repositories are never merged, deployed or released by
+this agent.
 
-New blockers create/update one assigned issue and mention its owner. Identical
-blockers and successful no-ops stay quiet; recovery closes the issue. Enable
-GitHub assignment/mention notifications. Proposal artifacts are kept for 30 days.
+## Limits and diagnostics
 
-All inference, including summaries, shares at most 16 requests and a 20-minute
-agent deadline. Groq uses short excerpts, small pages, compaction and 61-second
-request pacing to fit its published base free limits of 8K tokens/minute and
-200K tokens/day. Google requests are paced 13 seconds apart; setup testing
-observed a 20-request daily quota for 3.8 Flash. Check your account's actual
-limits. Oversized or incomplete tasks stop with a blocker and retain partial work.
+A run has at most 16 inference requests and a 20-minute agent deadline, including
+counted context-compaction requests. Groq requests are paced 61 seconds apart,
+Google requests 13 seconds, and the other providers 3 seconds. Provider errors
+stop the run without retrying against another account. Oversized contexts,
+incomplete model responses and unresolved work produce blockers with partial
+patches retained when they fit the artifact limit.
 
-The reusable `smoke.yml` tests real key authentication, editing and test repair
-in a disposable Rust fixture. It accepts the same provider/model/paid setting
-and explicit secrets. Local `maintainer smoke` uses your YAML settings. A smoke
-run permits six requests over eight minutes and cannot publish source changes.
+Edits are limited to 25 regular non-executable files and a 500 KB patch. Changes
+to dependencies, workflow files and other protected paths require human work.
+The model cannot request arbitrary shell commands. Cargo checks execute source
+and build scripts, so run only trusted repositories on dedicated infrastructure;
+read [SECURITY.md](SECURITY.md) for the trust boundary.
 
-## Development
+`repo-maintainer smoke --config /path/to/.maintainer.yml` tests real inference,
+editing and repair in a disposable failing Rust fixture. It uses at most six
+requests over eight minutes and cannot publish source changes. The reusable
+[smoke workflow](.github/workflows/smoke.yml) accepts the same provider settings
+and secrets. Normal unit/integration tests do not make live inference requests.
+
+## Development and community
 
 ```sh
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-.venv/bin/python -m unittest discover -s tests -v
-npm ci --prefix agent --ignore-scripts
-npm test --prefix agent
+cargo fmt --all --check
+cargo clippy --locked --all-targets -- -D warnings
+cargo test --locked
+cargo run --locked -- check --config maintainer.example.yml
 ```
 
-CI also builds/runs the Docker image and tests native SDK requests against
-simulated streaming API responses, without paid inference or real API keys.
+CI checks stable Rust and Rust 1.89 on Linux and macOS, and builds and exercises
+the Docker image. Tests cover simulated native provider conversations, a real
+offline Cargo repair loop, patch transfer, source guards, deadlines, configuration
+and notification behavior. Passing fixtures does not establish live model access.
 
-References: [Pi SDK](https://pi.dev/docs/latest/sdk),
-[OpenAI TypeScript SDK](https://developers.openai.com/api/reference/typescript),
-[Anthropic TypeScript SDK](https://platform.claude.com/docs/en/cli-sdks-libraries/sdks/typescript),
-[Gemini limits](https://ai.google.dev/gemini-api/docs/rate-limits),
-[Groq limits](https://console.groq.com/docs/rate-limits).
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md),
+[the code of conduct](CODE_OF_CONDUCT.md), [security reporting](SECURITY.md), and
+[project discussions](https://github.com/djsydney04/repo_maintainer/discussions).
+Licensed under [MIT](LICENSE).
+
+Provider references: [OpenAI function calling](https://developers.openai.com/api/docs/guides/function-calling),
+[Anthropic tools](https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools),
+[Gemini function calling](https://ai.google.dev/gemini-api/docs/function-calling),
+[Groq tool use](https://console.groq.com/docs/tool-use/overview).

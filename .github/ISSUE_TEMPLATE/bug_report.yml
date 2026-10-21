@@ -1,0 +1,22 @@
+name: Bug report
+description: Report a reproducible problem with the maintainer
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Include expected behavior and a minimal reproduction. Remove all credentials.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Commit or version, OS, Rust or Docker version, provider and redacted configuration.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted diagnostics
+      render: text

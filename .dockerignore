@@ -1,12 +1,7 @@
 *
 !Dockerfile
-!requirements.txt
+!Cargo.toml
+!Cargo.lock
 !maintainer.example.yml
-!agent/
-!agent/*.mjs
-!agent/providers.json
-!agent/package*.json
-!scripts/
-!scripts/*.py
-!examples/
-!examples/*
+!src/
+!src/**

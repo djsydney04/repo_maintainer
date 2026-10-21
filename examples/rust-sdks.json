@@ -47,6 +47,6 @@
       "prism-gemini",
       "prism-groq"
     ],
-    "package_check": "scripts/verify-packages.py"
+    "package_check": "scripts/verify-packages"
   }
 }

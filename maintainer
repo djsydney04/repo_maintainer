@@ -14,4 +14,5 @@ if [[ "${1:-}" == init ]]; then
 fi
 export MAINTAINER_OUTPUT_PATH="${MAINTAINER_OUTPUT_PATH:-$REPOSITORY_PATH/.maintainer-output}"
 mkdir -p -- "$MAINTAINER_OUTPUT_PATH"
-exec docker compose --project-directory "$maintainer_root" -f "$maintainer_root/compose.yml" run --build --rm maintainer "${@:-check}"
+if [[ $# -eq 0 ]]; then set -- check; fi
+exec docker compose --project-directory "$maintainer_root" -f "$maintainer_root/compose.yml" run --build --rm maintainer "$@" --output "/output/$(date +%s)-$$"
