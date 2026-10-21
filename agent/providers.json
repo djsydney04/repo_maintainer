@@ -1,0 +1,24 @@
+{
+  "google": {
+    "key": "GEMINI_API_KEY", "defaultModel": "gemini-3.8-flash",
+    "models": ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"],
+    "paid": false, "intervalMs": 13000, "contextWindow": 100000, "maxTokens": 4096,
+    "reserveTokens": 8192, "keepRecentTokens": 12000, "maxInputChars": 300000
+  },
+  "groq": {
+    "key": "GROQ_API_KEY", "defaultModel": "openai/gpt-oss-120b",
+    "models": ["openai/gpt-oss-120b", "qwen/qwen3.8-27b"],
+    "paid": false, "intervalMs": 61000, "contextWindow": 6000, "maxTokens": 1536,
+    "reserveTokens": 2500, "keepRecentTokens": 1200, "maxInputChars": 18000
+  },
+  "openai": {
+    "key": "OPENAI_API_KEY", "defaultModel": "gpt-5.4", "models": null,
+    "paid": true, "intervalMs": 3000, "contextWindow": 100000, "maxTokens": 4096,
+    "reserveTokens": 8192, "keepRecentTokens": 12000, "maxInputChars": 300000
+  },
+  "anthropic": {
+    "key": "ANTHROPIC_API_KEY", "defaultModel": "claude-sonnet-4-6", "models": null,
+    "paid": true, "intervalMs": 3000, "contextWindow": 100000, "maxTokens": 8192,
+    "reserveTokens": 16384, "keepRecentTokens": 12000, "maxInputChars": 300000
+  }
+}

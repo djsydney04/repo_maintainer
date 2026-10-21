@@ -1,0 +1,12 @@
+*
+!Dockerfile
+!requirements.txt
+!maintainer.example.yml
+!agent/
+!agent/*.mjs
+!agent/providers.json
+!agent/package*.json
+!scripts/
+!scripts/*.py
+!examples/
+!examples/*

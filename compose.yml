@@ -1,0 +1,19 @@
+services:
+  maintainer:
+    build: .
+    user: "${MAINTAINER_UID:-1000}:${MAINTAINER_GID:-1000}"
+    init: true
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      SDK_MAINTENANCE_API_KEY: ${SDK_MAINTENANCE_API_KEY:-}
+    volumes:
+      - type: bind
+        source: ${REPOSITORY_PATH:-../prism}
+        target: /repository
+        read_only: true
+      - type: bind
+        source: ${MAINTAINER_OUTPUT_PATH:-../prism/.maintainer-output}
+        target: /output
