@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="400" viewBox="0 0 1280 400" role="img" aria-labelledby="title desc">
+  <title id="title">Repo Maintainer</title>
+  <desc id="desc">Official documentation becomes reviewed pull requests through a read, patch, verify and propose workflow.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0B1024"/><stop offset="1" stop-color="#111025"/></linearGradient>
+    <linearGradient id="accent" gradientUnits="userSpaceOnUse" x1="74" y1="0" x2="1206" y2="0"><stop stop-color="#56C8FF"/><stop offset="0.5" stop-color="#AB8CFF"/><stop offset="1" stop-color="#F49BCB"/></linearGradient>
+    <radialGradient id="glow"><stop stop-color="#7D55DD" stop-opacity=".22"/><stop offset="1" stop-color="#7D55DD" stop-opacity="0"/></radialGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0V32" fill="none" stroke="#6676A6" stroke-opacity=".08"/></pattern>
+  </defs>
+  <rect width="1280" height="400" rx="24" fill="url(#background)"/>
+  <rect width="1280" height="400" rx="24" fill="url(#grid)"/>
+  <ellipse cx="1050" cy="80" rx="470" ry="310" fill="url(#glow)"/>
+  <path d="M74 45H128" stroke="url(#accent)" stroke-width="5" stroke-linecap="round"/>
+  <text x="74" y="132" fill="#F6F7FF" font-family="Inter, Helvetica, Arial, sans-serif" font-size="72" font-weight="700" letter-spacing="-2">Repo Maintainer</text>
+  <text x="77" y="181" fill="#B8C4E5" font-family="Inter, Helvetica, Arial, sans-serif" font-size="27">Official docs. Focused changes. Tested pull requests.</text>
+  <g font-family="Inter, Helvetica, Arial, sans-serif">
+    <path d="M312 287H368M612 287H668M912 287H968" stroke="url(#accent)" stroke-width="2"/>
+    <g transform="translate(74 242)">
+      <rect width="238" height="92" rx="16" fill="#101A30" stroke="#304D70"/>
+      <rect x="20" y="22" width="42" height="47" rx="7" fill="#56C8FF" fill-opacity=".13"/>
+      <path d="M33 34H49M33 42H49M33 50H44M33 58H46" stroke="#76D2FF" stroke-width="2" stroke-linecap="round"/>
+      <text x="80" y="40" font-size="23" font-weight="600" fill="#F6F7FF">Read</text>
+      <text x="80" y="64" font-size="15" fill="#A3B4D5">Official sources</text>
+    </g>
+    <g transform="translate(374 242)">
+      <rect width="238" height="92" rx="16" fill="#17172F" stroke="#51416F"/>
+      <rect x="20" y="22" width="42" height="47" rx="7" fill="#AB8CFF" fill-opacity=".13"/>
+      <path d="M33 46H49M41 38V54" stroke="#BCA5FF" stroke-width="2.5" stroke-linecap="round"/>
+      <text x="80" y="40" font-size="23" font-weight="600" fill="#F6F7FF">Patch</text>
+      <text x="80" y="64" font-size="15" fill="#A3B4D5">Within your rules</text>
+    </g>
+    <g transform="translate(674 242)">
+      <rect width="238" height="92" rx="16" fill="#101E29" stroke="#2D5B58"/>
+      <rect x="20" y="22" width="42" height="47" rx="7" fill="#54DFBB" fill-opacity=".13"/>
+      <path d="M32 46L39 53L51 39" fill="none" stroke="#68E6C6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="80" y="40" font-size="23" font-weight="600" fill="#F6F7FF">Verify</text>
+      <text x="80" y="64" font-size="15" fill="#A3B4D5">Independent checks</text>
+    </g>
+    <g transform="translate(974 242)">
+      <rect width="232" height="92" rx="16" fill="#25192E" stroke="#67465F"/>
+      <rect x="20" y="22" width="42" height="47" rx="7" fill="#F49BCB" fill-opacity=".13"/>
+      <circle cx="34" cy="35" r="3" fill="none" stroke="#F5B0D6" stroke-width="2"/>
+      <circle cx="34" cy="57" r="3" fill="none" stroke="#F5B0D6" stroke-width="2"/>
+      <circle cx="49" cy="57" r="3" fill="none" stroke="#F5B0D6" stroke-width="2"/>
+      <path d="M34 39V53M49 53V42Q49 35 41 35" fill="none" stroke="#F5B0D6" stroke-width="2"/>
+      <text x="80" y="40" font-size="23" font-weight="600" fill="#F6F7FF">Propose</text>
+      <text x="80" y="64" font-size="15" fill="#A3B4D5">You review the PR</text>
+    </g>
+  </g>
+  <text x="77" y="371" fill="#7E90B7" font-family="Inter, Helvetica, Arial, sans-serif" font-size="13" letter-spacing="2">YOUR MODEL · YOUR CONFIGURATION · YOUR REVIEW</text>
+</svg>

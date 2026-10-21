@@ -1,8 +1,12 @@
 # Repo Maintainer
 
+![Official docs, focused changes, tested pull requests](docs/assets/banner.svg)
+
 [![Maintainer checks](https://github.com/djsydney04/repo_maintainer/actions/workflows/ci.yml/badge.svg)](https://github.com/djsydney04/repo_maintainer/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Rust: 1.89+](https://img.shields.io/badge/rust-1.89%2B-orange.svg)](Cargo.toml)
+[![Configuration: YAML](https://img.shields.io/badge/config-YAML-56c8ff.svg)](maintainer.example.yml)
+[![Docker](https://img.shields.io/badge/run-Docker-54dfbb.svg)](Dockerfile)
 
 A Rust maintenance agent that reads official documentation, makes focused fixes,
 validates them, and opens pull requests. Run it weekly through GitHub Actions or
