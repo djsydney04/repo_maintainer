@@ -15,6 +15,7 @@ include = [
   "src/**", "tests/*.rs", "examples/**", "Cargo.toml", "Cargo.lock", "rustfmt.toml",
   "README.md", "LICENSE", "maintainer.example.yml", "CHANGELOG.md",
   "CONTRIBUTING.md", "SECURITY.md", "CODE_OF_CONDUCT.md",
+  "docs/**",
 ]
 
 [[bin]]

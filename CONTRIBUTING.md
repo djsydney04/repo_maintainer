@@ -4,6 +4,9 @@ Bug reports, documentation improvements and focused pull requests are welcome.
 Check existing issues before opening a new one. Discuss changes to providers,
 editing boundaries or workflow permissions in an issue first.
 
+Start with the [configuration reference](docs/configuration.md) and
+[architecture guide](docs/architecture.md) for the current behavior and limits.
+
 Install Rust 1.89 or newer and Git. From a fork or clone:
 
 ```sh
