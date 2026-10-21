@@ -1,0 +1,44 @@
+name: Self-hosted Renovate checks
+on:
+  pull_request:
+    paths:
+      - renovate-image.txt
+      - renovate.example.json
+      - compose.dependencies.yml
+      - maintainer
+      - scripts/run-dependencies.sh
+      - .github/workflows/dependency-tests.yml
+  push:
+    branches: [main]
+    paths:
+      - renovate-image.txt
+      - renovate.example.json
+      - compose.dependencies.yml
+      - maintainer
+      - scripts/run-dependencies.sh
+      - .github/workflows/dependency-tests.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  renovate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Validate Compose and the central config using the pinned Renovate container
+        run: |
+          export MAINTENANCE_RENOVATE_IMAGE="$(cat renovate-image.txt)"
+          export RENOVATE_CONFIG_PATH="$PWD/renovate.example.json"
+          docker compose -f compose.dependencies.yml config --quiet
+          ./maintainer dependencies check --config renovate.example.json
+      - name: Confirm the Renovate user can write the persistent cache
+        run: |
+          export MAINTENANCE_RENOVATE_IMAGE="$(cat renovate-image.txt)"
+          export RENOVATE_CONFIG_PATH="$PWD/renovate.example.json"
+          docker compose -f compose.dependencies.yml run --rm renovate sh -c '
+            dependency_scratch=$(mktemp -d "$RENOVATE_BASE_DIR/ci-XXXXXX")
+            rmdir "$dependency_scratch"
+          '

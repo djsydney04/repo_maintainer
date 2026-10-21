@@ -1,119 +1,121 @@
-# Merge dependency updates without a model
+# Run Renovate on your infrastructure
 
 [← Overview](../README.md) · [Cloud setup](getting-started.md#weekly-cloud-maintenance)
 
-Use your existing dependency bot to create updates and CI to decide when they
-can merge. No model key, inference request, Rust build or `.maintainer.yml` is
-needed for dependency merging. These integrations work with any language.
-
-| Update | Default behavior |
-| --- | --- |
-| Patch | Automatically merge after required checks and reviews |
-| Minor | Human review; optionally enable automatic merging |
-| Major or unknown | Human review |
-| Failed CI or missing required review | Wait for resolution |
+Repo Maintainer can run the official Renovate container on your own machine or
+server. Renovate discovers dependency updates, refreshes lockfiles, opens PRs,
+rebases its existing updates and merges eligible PRs once checks pass. This path
+makes **zero model calls** and does not need GitHub Actions or a hosted Renovate
+app. Docker runs the job; your scheduler decides when to run it.
 
 ```mermaid
 flowchart LR
-    Bot[Dependency bot PR] --> Policy{Allowed update?}
-    Policy -->|Patch| Checks[Required CI and reviews]
-    Policy -->|Major or unknown| Review[Human review]
-    Checks -->|Pass| Merge[Merge]
-    Checks -->|Fail| Wait[Keep PR open]
+    Server[Your server and scheduler] --> Maintainer[Repo Maintainer]
+    Maintainer --> Renovate[Official Renovate container]
+    Config[Central repository list and policy] --> Renovate
+    Renovate --> PR[Dependency update PRs]
+    PR --> Checks[CI and required reviews]
+    Checks -->|Pass and allowed update| Merge[Renovate merges on a later run]
 ```
 
-Choose the integration for the bot already installed in each managed repository.
-Avoid having Dependabot and Renovate create competing updates for the same files.
-The documentation maintenance agent continues to propose PRs for human review;
-dependency merging is a separate, explicit opt-in.
+## Docker setup
 
-## Dependabot: one shared action
+From a checkout of Repo Maintainer on your server:
 
-Keep the consuming repository's existing `.github/dependabot.yml`. Add this as
-`.github/workflows/dependency-automerge.yml` in that repository:
-
-```yaml
-name: Dependency auto-merge
-on:
-  pull_request_target:
-    types: [opened, synchronize, reopened, ready_for_review]
-permissions:
-  contents: read
-jobs:
-  dependencies:
-    if: github.event.pull_request.user.login == 'dependabot[bot]'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    steps:
-      - uses: djsydney04/repo_maintainer/.github/actions/dependency-automerge@FULL_COMMIT_SHA
+```sh
+./maintainer dependencies init
 ```
 
-Replace `FULL_COMMIT_SHA` with a reviewed commit containing this action. In the
-consuming repository's **Settings → General → Pull Requests**, enable **Allow
-auto-merge** and **Allow squash merging**. Configure at least one meaningful
-required CI check on the default branch through branch protection or an active
-ruleset. The action fails with setup instructions if these settings are absent.
-Keep the normal CI workflow running on `pull_request`; the merge action does not
-run the tests itself.
+Edit the generated `renovate.config.json` and put the repositories you own in its
+`repositories` list, for example `["your-org/api", "your-org/web"]`. This is one central
+configuration for all listed repositories. The supplied settings are:
 
-Merge the caller into the default branch. New or updated Dependabot PRs are then
-evaluated automatically. To reevaluate an existing open PR, close and reopen it.
-GitHub waits for required checks and reviews; if all requirements are already
-met, the action can merge immediately. It requests no approval or rule bypass.
-Repository or organization policies can restrict the token's write permissions.
+| Update | Behavior |
+| --- | --- |
+| Patch | Merge after passing checks and required reviews |
+| Minor, major, unknown, pin or digest update | Leave for human review |
+| Missing, pending or failed checks | Keep the PR open |
 
-To also allow minor updates, add:
+The example sets `requireConfig: "ignored"`, so repositories do not need their own
+Renovate config. All update/merge rules come from this central file. Use
+`requireConfig: "optional"` if you want repository configs to participate; their
+rules may then change the effective merge policy. To also merge minor updates,
+change `matchUpdateTypes` to `["patch", "minor"]` in the central file.
 
-```yaml
-        with:
-          allow-minor: 'true'
+Create a `.env` in the Repo Maintainer checkout with `RENOVATE_TOKEN` set to your
+Renovate bot account's token. Scope it to the listed repositories and grant the
+[permissions Renovate needs](https://docs.renovatebot.com/modules/platform/github/).
+An existing hosted Renovate app is unnecessary. Keep meaningful required CI
+checks and reviews enabled on your default branches.
+
+```sh
+# Validate using Renovate itself. No token or model key is needed for this check.
+./maintainer dependencies check
+
+# Preview updates and merge decisions without writing branches or PRs.
+./maintainer dependencies run
+
+# Enable actual updates, PR creation and eligible merges.
+./maintainer dependencies run --apply
 ```
 
-The action uses verified Dependabot commit metadata, checks every dependency in
-grouped PRs, verifies every commit's bot identity and signature, and rejects stale
-heads, forks, drafts and non-default targets. Unknown metadata stays for human
-review. The `result` output is `requested`, `already-enabled` or `skipped`.
+`--config /absolute/path/renovate.json` selects another central config for any of
+these commands. `init` preserves an existing file. Both preview and live runs
+validate the configuration before running Renovate. A run exits after processing
+the repository list; repeat it to discover releases and merge PRs whose checks
+have since passed. Renovate handles version classification and merge decisions
+itself, including grouped dependency updates.
 
-This privileged `pull_request_target` job must contain only the pinned action.
-Do not add a PR checkout, dependency installation, tests or other execution of PR
-contents to it. The action loads its own pinned code and only uses the GitHub API
-and the runner's GitHub CLI. No personal access token or model secret is needed.
+The default image is pinned by digest in [`renovate-image.txt`](../renovate-image.txt)
+and supports Linux AMD64 and ARM64. `MAINTENANCE_RENOVATE_IMAGE` can select another
+image pinned with `@sha256:DIGEST`. The container receives the central config
+read-only and a named cache volume. It receives no source mount, Docker socket or
+model keys. Renovate logs are sent directly to the terminal or scheduler.
 
-## Renovate: one shared preset
+## Native executable
 
-For repositories with Renovate installed, add this preset to their existing
-`renovate.json`:
+With Repo Maintainer installed and Docker available on the host:
 
-```json
-{
-  "extends": [
-    "config:recommended",
-    "github>djsydney04/repo_maintainer:renovate-patch#FULL_COMMIT_SHA"
-  ]
-}
+```sh
+repo-maintainer dependencies-init
+# Edit renovate.config.json and export RENOVATE_TOKEN in the host environment.
+repo-maintainer dependencies --validate-only
+repo-maintainer dependencies
+repo-maintainer dependencies --apply
 ```
 
-Pin a reviewed commit containing `renovate-patch.json`. The preset enables
-Renovate's own patch PR merging and requires passing tests. Platform auto-merge
-is disabled so Renovate checks CI itself, including when GitHub has no required
-checks configured. Keep meaningful required CI checks and reviews on the default
-branch as well. Renovate merges on a later run, so a green PR may wait for its
-next cycle. No additional Actions workflow or model is needed.
+Use `--config /absolute/path/renovate.json` to share the same configuration with
+the Docker wrapper. Native commands use exported environment variables and do
+not load `.env` files. Neither path requires a model key or a Node installation
+on the host. The native dependency command delegates to Docker and preserves
+its exit status and signal handling.
 
-For patch and minor updates, append a rule to the consuming configuration:
+## Schedule on your server
 
-```json
-"packageRules": [
-  {"matchUpdateTypes": ["patch", "minor"], "automerge": true}
-]
+The example [service](../deploy/systemd/repo-maintainer-dependencies.service) and
+[timer](../deploy/systemd/repo-maintainer-dependencies.timer) run every 30 minutes.
+Copy them into `/etc/systemd/system/`, adjust the account and checkout path, put
+the central JSON in `/etc/repo-maintainer/renovate.json` and the token in
+`/etc/repo-maintainer/renovate.env`. The service account needs permission to use
+Docker and read these files. Restrict the token file to that account.
+
+```sh
+sudo systemctl daemon-reload
+sudo systemctl enable --now repo-maintainer-dependencies.timer
+journalctl -u repo-maintainer-dependencies.service
 ```
 
-Other local presets and rules can override these settings. Review the resolved
-Renovate configuration when combining merge policies. Major updates remain for
-human review with the configuration shown here.
+A systemd timer does not start another copy of an already running service. Other
+schedulers can run the same `./maintainer dependencies run --apply` command;
+configure them to prevent overlapping runs. The machine must stay on for its
+scheduler to run. The supplied service enables live writes, so validate and
+preview the repository list before enabling the timer.
 
-References: [GitHub's Dependabot automation](https://docs.github.com/en/code-security/tutorials/secure-your-dependencies/automate-dependabot-with-actions),
-[Renovate auto-merge](https://docs.renovatebot.com/key-concepts/automerge/), and
-[shared preset syntax](https://docs.renovatebot.com/config-presets/).
+Renovate manages PRs created by its own bot account. It does not adopt existing
+Dependabot PRs. When moving a repository to this runner, choose which bot owns
+updates for each ecosystem to avoid duplicate PRs. Repo Maintainer's coding
+agent continues to produce proposals for human review separately.
+
+References: [self-hosting Renovate](https://docs.renovatebot.com/examples/self-hosting/),
+[central configuration](https://docs.renovatebot.com/self-hosted-configuration/),
+and [CI-aware auto-merge](https://docs.renovatebot.com/key-concepts/automerge/).

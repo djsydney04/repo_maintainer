@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 maintainer_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+if [[ "${1:-}" == dependencies ]]; then
+  shift
+  exec bash "$maintainer_root/scripts/run-dependencies.sh" "$@"
+fi
 export REPOSITORY_PATH="$(cd -- "${REPOSITORY_PATH:-$PWD}" && pwd)"
 export MAINTAINER_UID="$(id -u)" MAINTAINER_GID="$(id -g)"
 if [[ "${1:-}" == init ]]; then

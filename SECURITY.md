@@ -25,8 +25,13 @@ explicit workflow command in a separate job with write permissions. The
 documentation maintenance workflow does not merge PRs, force push, deploy or
 release maintained repositories.
 
-The separate, opt-in dependency merge action can request merging of verified
-Dependabot PRs through GitHub's required checks and reviews. It never checks out
-or executes PR contents, approves reviews, or requests an administrator bypass.
-The Renovate preset delegates dependency merging to Renovate. See the
-[dependency setup and trust boundary](docs/dependency-updates.md).
+The separate, opt-in dependency runner launches the official Renovate image,
+pinned by digest, with its own repository token. Preview is the default; live
+updates and merging require `--apply`. The supplied central configuration keeps
+major updates for review and requires passing checks before Renovate merges.
+The runner mounts its config read-only and a persistent cache, without a Docker
+socket, host checkout or model credentials. Renovate clones repositories and can
+run package managers inside that container; maintain only trusted repositories
+on infrastructure dedicated to this workload. Operator configuration controls
+Renovate's execution and merge policy. See the
+[self-hosted dependency setup](docs/dependency-updates.md).

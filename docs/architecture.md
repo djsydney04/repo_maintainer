@@ -36,8 +36,9 @@ checks run. Independent validation must succeed before publishing.
 
 The documentation agent never force pushes, merges, releases or deploys. A human
 reviews the resulting PR. Existing maintenance PRs receive review/CI feedback on
-later runs. A separate [dependency merge integration](dependency-updates.md) can
-merge eligible bot updates after CI when explicitly enabled by the consumer.
+later runs. A separate [self-hosted Renovate runner](dependency-updates.md)
+discovers dependency updates, opens PRs and merges eligible updates after CI
+when the operator enables live runs. It runs independently of the model loop.
 
 ## Limits and incomplete work
 

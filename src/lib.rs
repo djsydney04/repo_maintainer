@@ -1,6 +1,7 @@
 pub mod agent;
 pub mod boundary;
 pub mod config;
+pub mod dependencies;
 pub mod documentation;
 pub mod process;
 pub mod provider;

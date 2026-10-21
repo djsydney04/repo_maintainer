@@ -1,0 +1,13 @@
+[Unit]
+Description=Repo Maintainer self-hosted Renovate
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=repo-maintainer
+WorkingDirectory=/opt/repo_maintainer
+EnvironmentFile=/etc/repo-maintainer/renovate.env
+ExecStart=/opt/repo_maintainer/maintainer dependencies run --apply --config /etc/repo-maintainer/renovate.json
+TimeoutStartSec=45min
+KillMode=control-group

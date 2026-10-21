@@ -15,7 +15,7 @@ sources you choose, makes focused changes, runs checks, and proposes a pull
 request for your review. Configure it in **one `.maintainer.yml` file**.
 
 **[Get started](docs/getting-started.md)** · **[Configuration](docs/configuration.md)** ·
-**[Dependency auto-merge](docs/dependency-updates.md)** ·
+**[Self-hosted dependencies](docs/dependency-updates.md)** ·
 **[How it works](docs/architecture.md)** · **[Troubleshooting](docs/troubleshooting.md)** ·
 **[Contribute](CONTRIBUTING.md)**
 
@@ -115,10 +115,12 @@ no-ops stay quiet. [Architecture and limits →](docs/architecture.md)
 
 ## Dependency PRs without inference
 
-Managed repositories can opt into a [shared Dependabot action or Renovate preset](docs/dependency-updates.md)
-to merge patch updates after CI and required reviews. Minor updates are optional;
-major and unknown updates stay for human review. This path makes **zero model
-calls** and needs no API key or maintainer build. Documentation proposals continue
+Run the [official Renovate container on your own infrastructure](docs/dependency-updates.md)
+with `./maintainer dependencies` or `repo-maintainer dependencies`. One central
+repository list and your Renovate token control updates, PR creation and patch
+merging after checks pass. Preview is the default; `--apply` enables writes.
+Use your server's scheduler for recurring runs. This path makes **zero model
+calls** and needs no GitHub Actions workflow. Coding-agent proposals continue
 to require human review.
 
 ## Project information

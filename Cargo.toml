@@ -16,6 +16,7 @@ include = [
   "README.md", "LICENSE", "maintainer.example.yml", "CHANGELOG.md",
   "CONTRIBUTING.md", "SECURITY.md", "CODE_OF_CONDUCT.md",
   "docs/**",
+  "renovate.example.json", "renovate-image.txt",
 ]
 
 [[bin]]

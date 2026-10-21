@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Repo Maintainer dependencies every 30 minutes
+
+[Timer]
+OnCalendar=*:0/30
+Persistent=true
+Unit=repo-maintainer-dependencies.service
+
+[Install]
+WantedBy=timers.target

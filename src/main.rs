@@ -3,7 +3,7 @@ use clap::{Parser, ValueEnum};
 use repo_maintainer::{
     agent,
     config::{self, Config},
-    documentation, process, workflow,
+    dependencies, documentation, process, workflow,
 };
 use std::{
     fs,
@@ -14,6 +14,8 @@ use std::{
 #[derive(Clone, Copy, Debug, Default, ValueEnum)]
 enum Command {
     Init,
+    DependenciesInit,
+    Dependencies,
     #[default]
     Check,
     Run,
@@ -50,6 +52,16 @@ struct Cli {
     exit_code: i32,
     #[arg(long)]
     url: Option<String>,
+    #[arg(
+        long,
+        help = "Permit Renovate to create/update PRs and merge eligible updates"
+    )]
+    apply: bool,
+    #[arg(
+        long,
+        help = "Validate Renovate configuration without running dependency updates"
+    )]
+    validate_only: bool,
 }
 fn main() {
     let cli = Cli::parse();
@@ -62,6 +74,29 @@ fn main() {
     }
 }
 fn execute(cli: Cli) -> Result<()> {
+    if matches!(
+        cli.command,
+        Command::Dependencies | Command::DependenciesInit
+    ) {
+        let path = cli.repo.join(
+            cli.config
+                .as_deref()
+                .unwrap_or(std::path::Path::new("renovate.config.json")),
+        );
+        return if matches!(cli.command, Command::DependenciesInit) {
+            ensure!(
+                !cli.apply && !cli.validate_only,
+                "dependencies-init does not accept run flags"
+            );
+            dependencies::init(&path)
+        } else {
+            dependencies::run(&path, &config::environment(), cli.validate_only, cli.apply)
+        };
+    }
+    ensure!(
+        !cli.apply && !cli.validate_only,
+        "--apply and --validate-only are only for dependencies"
+    );
     if matches!(cli.command, Command::Init) {
         let path = cli.repo.join(".maintainer.yml");
         match fs::OpenOptions::new()
@@ -105,7 +140,7 @@ fn execute(cli: Cli) -> Result<()> {
     });
     let source = || cli.source.as_deref().context("--source is required");
     match cli.command {
-        Command::Init => unreachable!(),
+        Command::Init | Command::Dependencies | Command::DependenciesInit => unreachable!(),
         Command::Check => println!(
             "Configuration valid: {}\nProvider: {} / {}\nDocumentation sources: {}\nNo API request made.",
             config.name,

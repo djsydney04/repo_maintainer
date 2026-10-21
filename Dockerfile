@@ -3,6 +3,7 @@ WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY maintainer.example.yml ./
+COPY renovate.example.json renovate-image.txt ./
 RUN cargo build --release --locked
 
 FROM rust:1.89-slim-bookworm

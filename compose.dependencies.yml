@@ -1,0 +1,24 @@
+name: repo-maintainer-dependencies
+services:
+  renovate:
+    image: ${MAINTENANCE_RENOVATE_IMAGE:?Use ./maintainer dependencies to select the pinned Renovate image}
+    init: true
+    environment:
+      RENOVATE_TOKEN: ${RENOVATE_TOKEN:-}
+      RENOVATE_GITHUB_COM_TOKEN: ${RENOVATE_GITHUB_COM_TOKEN:-}
+      RENOVATE_HOST_RULES: ${RENOVATE_HOST_RULES:-[]}
+      RENOVATE_GIT_PRIVATE_KEY: ${RENOVATE_GIT_PRIVATE_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      RENOVATE_CONFIG_FILE: /config/renovate.json
+      RENOVATE_BASE_DIR: /tmp/renovate
+    volumes:
+      - type: bind
+        source: ${RENOVATE_CONFIG_PATH:?Set the absolute path to renovate.config.json}
+        target: /config/renovate.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - renovate-cache:/tmp/renovate
+volumes:
+  renovate-cache:
+    name: repo-maintainer-renovate-cache
