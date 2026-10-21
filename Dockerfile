@@ -14,7 +14,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && if command -v rustup >/dev/null; then \
          rustup toolchain install stable --profile minimal --component rustfmt --component clippy \
          && rustup default stable; fi \
-    && useradd --create-home --uid 10001 maintainer
+    && useradd --create-home --uid 10001 maintainer \
+    && dpkg --compare-versions \
+        "$(dpkg-query --show --showformat='${Version}' ca-certificates)" ge '20250419~deb12u2'
 COPY --from=build /build/target/release/repo-maintainer /usr/local/bin/repo-maintainer
 COPY scripts/install-codex.sh /usr/local/lib/maintainer/install-codex.sh
 RUN if [ "$INSTALL_CODEX" = true ]; then bash /usr/local/lib/maintainer/install-codex.sh; \
