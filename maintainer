@@ -8,7 +8,7 @@ if [[ "${1:-}" == init ]]; then
     echo '.maintainer.yml already exists; keeping your settings.'
   else
     cp -- "$maintainer_root/maintainer.example.yml" "$REPOSITORY_PATH/.maintainer.yml"
-    echo "Created $REPOSITORY_PATH/.maintainer.yml. Edit its docs sources and provider, then run maintainer check."
+    echo "Created $REPOSITORY_PATH/.maintainer.yml. Configure the task, agent and project checks, then run maintainer check."
   fi
   exit 0
 fi

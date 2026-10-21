@@ -1,0 +1,25 @@
+# Commit a copy under .github/workflows/ in the repository you want to maintain.
+# Replace both FULL_COMMIT_SHA placeholders with the same reviewed maintainer SHA.
+name: Scheduled repository maintenance
+on:
+  schedule:
+    - cron: '0 9 * * 1'
+      timezone: America/Los_Angeles
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  maintain:
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: write
+    uses: djsydney04/repo_maintainer/.github/workflows/maintain.yml@FULL_COMMIT_SHA
+    with:
+      maintainer_ref: FULL_COMMIT_SHA
+      config_path: .maintainer.yml
+      runner_labels: '["self-hosted", "linux", "x64", "repo-maintainer"]'
+      install_codex: true
+    secrets:
+      CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}

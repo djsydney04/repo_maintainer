@@ -30,16 +30,35 @@ jobs:
           cargo +"$TOOLCHAIN" test --locked
           cargo +"$TOOLCHAIN" run --locked -- check --config maintainer.example.yml
   docker:
+    name: Docker (${{ matrix.runtime }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [rust, node]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
       - run: docker compose config --quiet
-      - run: docker build --tag repo-maintainer:test .
+      - name: Build the selected runtime with native Codex
+        env:
+          RUNTIME: ${{ matrix.runtime }}
+        run: |
+          runtime_image=rust:1.89-slim-bookworm
+          if [ "$RUNTIME" = node ]; then runtime_image=node:24-bookworm; fi
+          docker build --build-arg "RUNTIME_IMAGE=$runtime_image" --tag repo-maintainer:test .
       - name: Validate YAML without an API key
         run: docker run --rm --volume "$PWD:/repository:ro" repo-maintainer:test check --config maintainer.example.yml
       - name: Check Rust tools as the container user
+        if: matrix.runtime == 'rust'
         run: |
           docker run --rm --entrypoint cargo repo-maintainer:test --version
           docker run --rm --entrypoint cargo repo-maintainer:test fmt --version
+      - name: Verify Codex's native binary
+        run: docker run --rm --entrypoint codex repo-maintainer:test --version
+      - name: Verify a Node worker without Cargo
+        if: matrix.runtime == 'node'
+        run: |
+          docker run --rm --entrypoint sh repo-maintainer:test -c 'node --version && ! command -v cargo'
+          docker run --rm --volume "$PWD:/repository:ro" repo-maintainer:test check --config examples/node.yml

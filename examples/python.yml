@@ -1,0 +1,17 @@
+version: 1
+name: Python repository maintenance
+agent:
+  runner: codex
+  allow_paid: true
+instructions: |
+  Improve this Python project with a small, compatible fix and regression tests.
+  Run the configured test suite. Leave it unchanged when no useful work is found.
+editable:
+  root_files: [README.md, CHANGELOG.md]
+  source_dirs: [src, tests, docs]
+  extensions: [.py, .md, .json]
+validation:
+  profile: custom
+  checks:
+    - name: tests
+      command: [python3, -m, unittest, discover, -s, tests]

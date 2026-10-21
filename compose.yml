@@ -1,6 +1,10 @@
 services:
   maintainer:
-    build: .
+    build:
+      context: .
+      args:
+        RUNTIME_IMAGE: ${MAINTAINER_RUNTIME_IMAGE:-rust:1.89-slim-bookworm}
+        INSTALL_CODEX: ${MAINTAINER_INSTALL_CODEX:-true}
     user: "${MAINTAINER_UID:-1000}:${MAINTAINER_GID:-1000}"
     init: true
     working_dir: /repository
@@ -11,6 +15,8 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       SDK_MAINTENANCE_API_KEY: ${SDK_MAINTENANCE_API_KEY:-}
+      MAINTENANCE_API_KEY: ${MAINTENANCE_API_KEY:-}
+      CODEX_API_KEY: ${CODEX_API_KEY:-}
     volumes:
       - type: bind
         source: ${REPOSITORY_PATH:-.}

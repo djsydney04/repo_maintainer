@@ -121,6 +121,7 @@ fn binary_init_and_check_need_no_api_key_and_keep_existing_config() {
         Command::new(env!("CARGO_BIN_EXE_repo-maintainer"))
             .args([command, "--repo", temp.path().to_str().unwrap()])
             .env_remove("MAINTENANCE_CONFIG")
+            .env("MAINTENANCE_RUNNER", "")
             .env("MAINTENANCE_PROVIDER", "")
             .env("MAINTENANCE_MODEL", "")
             .env("MAINTENANCE_ALLOW_PAID", "")
@@ -145,4 +146,18 @@ fn binary_init_and_check_need_no_api_key_and_keep_existing_config() {
         String::from_utf8_lossy(&result.stderr)
     );
     assert!(String::from_utf8_lossy(&result.stdout).contains("No API request made"));
+}
+
+#[test]
+fn switching_to_codex_does_not_reuse_a_builtin_provider_model() {
+    let config = Config::from_str(
+        "agent:\n  provider: groq\n  model: openai/gpt-oss-120b\n",
+        &Environment::from([
+            ("MAINTENANCE_RUNNER".into(), "codex".into()),
+            ("MAINTENANCE_ALLOW_PAID".into(), "true".into()),
+        ]),
+    )
+    .unwrap();
+    assert_eq!(config.agent.runner, "codex");
+    assert!(config.agent.model.is_none());
 }

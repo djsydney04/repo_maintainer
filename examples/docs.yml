@@ -1,0 +1,18 @@
+version: 1
+name: Documentation upkeep
+agent:
+  runner: codex
+  allow_paid: true
+instructions: |
+  Compare the README and documentation against the implementation. Fix concrete
+  inaccuracies and improve examples. Preserve meaning and avoid cosmetic churn.
+editable:
+  root_files: [README.md, CHANGELOG.md]
+  source_dirs: [docs]
+  extensions: [.md]
+validation:
+  profile: custom
+  checks:
+    - name: whitespace
+      command: [git, diff, --check]
+    # Add your documentation build and link checker for this repository.

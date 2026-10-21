@@ -1,0 +1,24 @@
+version: 1
+name: Application maintenance
+agent:
+  runner: codex
+  allow_paid: true
+instructions: |
+  Find a small, useful improvement to this application. Preserve public behavior,
+  add regression tests for fixes, and run the configured checks. Do not make
+  changes merely to produce activity.
+editable:
+  root_files: [README.md, CHANGELOG.md]
+  source_dirs: [src, app, components, tests, docs]
+  extensions: [.js, .jsx, .ts, .tsx, .json, .md, .css]
+validation:
+  profile: custom
+  setup:
+    - name: dependencies
+      command: [npm, ci]
+      timeout_seconds: 600
+  checks:
+    - name: tests
+      command: [npm, test]
+    - name: lint
+      command: [npm, run, lint]
