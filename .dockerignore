@@ -3,5 +3,7 @@
 !Cargo.toml
 !Cargo.lock
 !maintainer.example.yml
+!renovate.example.json
+!renovate-image.txt
 !src/
 !src/**
