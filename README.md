@@ -1,4 +1,6 @@
-![Hand-drawn Repo Maintainer banner: read, patch, verify, propose](docs/assets/banner.png)
+<p align="center">
+  <img src="docs/assets/banner.png" alt="Repo Maintainer hand-drawn wordmark" width="720">
+</p>
 
 <p align="center">
   <a href="https://github.com/djsydney04/repo_maintainer/actions/workflows/ci.yml"><img alt="Build and tests" src="https://github.com/djsydney04/repo_maintainer/actions/workflows/ci.yml/badge.svg?branch=main"></a>
