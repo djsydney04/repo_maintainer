@@ -121,9 +121,9 @@ jobs:
       pull-requests: write
       issues: write
       actions: write
-    uses: djsydney04/repo_maintainer/.github/workflows/maintain.yml@64c3d4e5c76f67bc378b18cbb297a3a5ca69ee5a
+    uses: djsydney04/repo_maintainer/.github/workflows/maintain.yml@bb53d51b6ec4e7140a5d8d7aed2a78c44899488c
     with:
-      maintainer_ref: 64c3d4e5c76f67bc378b18cbb297a3a5ca69ee5a
+      maintainer_ref: bb53d51b6ec4e7140a5d8d7aed2a78c44899488c
       config_path: .maintainer.yml
       install_codex: true
     secrets:

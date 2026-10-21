@@ -62,3 +62,15 @@ jobs:
         run: |
           docker run --rm --entrypoint sh repo-maintainer:test -c 'node --version && ! command -v cargo'
           docker run --rm --volume "$PWD:/repository:ro" repo-maintainer:test check --config examples/node.yml
+      - name: Run a real Node project's configured checks without Cargo
+        if: matrix.runtime == 'node'
+        run: |
+          docker run --rm -i --entrypoint sh repo-maintainer:test <<'SH'
+          set -eu
+          project="$(mktemp -d)"
+          cd "$project"
+          printf '%s\n' '{"scripts":{"test":"node --test"}}' > package.json
+          printf '%s\n' 'const test = require("node:test"); const assert = require("node:assert/strict"); test("contract", () => assert.equal(1 + 1, 2));' > contract.test.js
+          printf '%s\n' '{"validation":{"profile":"custom","checks":[{"name":"tests","command":["npm","test"]}]}}' > .maintainer.yml
+          repo-maintainer validate --repo "$project"
+          SH

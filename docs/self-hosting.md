@@ -26,7 +26,7 @@ binary from cron, systemd, Kubernetes or an existing job system.
 
 ```yaml
 with:
-  maintainer_ref: 64c3d4e5c76f67bc378b18cbb297a3a5ca69ee5a
+  maintainer_ref: bb53d51b6ec4e7140a5d8d7aed2a78c44899488c
   config_path: .maintainer.yml
   runner_labels: '["self-hosted", "linux", "x64", "repo-maintainer"]'
   install_codex: true
