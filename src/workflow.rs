@@ -39,16 +39,57 @@ fn gh_json(args: &[&str]) -> Result<Value> {
     Ok(serde_json::from_str(&gh(args)?)?)
 }
 pub fn output(name: &str, value: &str) -> Result<()> {
+    ensure!(
+        !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'),
+        "Invalid workflow output name"
+    );
     ensure!(!value.contains(['\r', '\n']), "Invalid workflow output");
     if let Ok(path) = std::env::var("GITHUB_OUTPUT")
         && !path.is_empty()
     {
-        writeln!(
-            OpenOptions::new().append(true).open(path)?,
-            "{name}={value}"
-        )?;
+        append_output(Path::new(&path), name, value)?;
     }
     Ok(())
+}
+fn append_output(path: &Path, name: &str, value: &str) -> Result<()> {
+    // Keep one line in one write; parallel library callers must not interleave
+    // the formatting fragments in GitHub's step-output file.
+    OpenOptions::new()
+        .append(true)
+        .open(path)?
+        .write_all(format!("{name}={value}\n").as_bytes())?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod output_tests {
+    use super::*;
+    #[test]
+    fn concurrent_workflow_outputs_remain_complete_lines() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        let workers: Vec<_> = (0..8)
+            .map(|worker| {
+                let path = file.path().to_path_buf();
+                std::thread::spawn(move || {
+                    for value in 0..20 {
+                        append_output(&path, &format!("worker{worker}"), &value.to_string())
+                            .unwrap();
+                    }
+                })
+            })
+            .collect();
+        for worker in workers {
+            worker.join().unwrap();
+        }
+        let content = fs::read_to_string(file.path()).unwrap();
+        assert_eq!(content.lines().count(), 160);
+        for line in content.lines() {
+            let (name, value) = line.split_once('=').unwrap();
+            assert!(name.starts_with("worker"));
+            assert!(name[6..].parse::<u32>().unwrap() < 8);
+            assert!(value.parse::<u32>().unwrap() < 20);
+        }
+    }
 }
 pub fn instructions(config: &Config, root: &Path) -> Result<String> {
     let mut text = config.instructions.clone();

@@ -85,7 +85,11 @@ pub fn add(config: &Config, mut brief: String) -> Result<String> {
                 18_000
             },
         ));
-        brief.push_str("\n[Excerpt may be truncated. Use reference for a larger excerpt.]\n");
+        brief.push_str(if config.agent.runner == "builtin" {
+            "\n[Excerpt may be truncated. Use reference for a larger excerpt.]\n"
+        } else {
+            "\n[Excerpt may be truncated. Use the provided evidence; report a blocker if additional reference access is required.]\n"
+        });
     }
     Ok(brief)
 }

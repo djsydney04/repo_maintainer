@@ -27,7 +27,7 @@ jobs:
         run: |
           cargo +"$TOOLCHAIN" fmt --all --check
           cargo +"$TOOLCHAIN" clippy --locked --all-targets -- -D warnings
-          cargo +"$TOOLCHAIN" test --locked
+          env -u GITHUB_OUTPUT cargo +"$TOOLCHAIN" test --locked
           cargo +"$TOOLCHAIN" run --locked -- check --config maintainer.example.yml
   docker:
     name: Docker (${{ matrix.runtime }})
