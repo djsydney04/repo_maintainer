@@ -148,7 +148,7 @@ jobs:
           --raw "$RUNNER_TEMP/agent-result.json" --exit-code "$AGENT_EXIT_CODE"
       - name: Retain completed or partial proposals
         if: always() && steps.prepare.outcome == 'success'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: repository-maintenance-proposal
           path: |
@@ -198,7 +198,7 @@ jobs:
           cargo install cargo-audit --version 0.22.2 --locked
       - name: Run configured checks and record validation of this exact patch
         run: automation/target/release/repo-maintainer validate --source source --artifacts "$RUNNER_TEMP/proposal"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: repository-maintenance-validation
           path: ${{ runner.temp }}/proposal/validation.json
