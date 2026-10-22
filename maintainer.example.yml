@@ -1,26 +1,40 @@
-# Copy this file to .maintainer.yml in your Rust repository, then edit the sources.
-version: 1
-name: SDK maintenance
+# Copy to .maintainer.yml in the repository you want to maintain.
+version: 2
+name: Repository maintenance
 agent:
-  provider: groq                # google, groq, openai, anthropic
-  # model: openai/gpt-oss-120b  # Optional: the provider default is used when omitted.
-  # allow_paid: true           # Required for openai or anthropic; no paid fallback.
-  max_requests: 16
-
-sources:
-  - https://developers.openai.com/api/docs/changelog
+  runner: codex                # codex or builtin (direct model APIs)
+  allow_paid: true              # Explicit account-usage opt-in for Codex/OpenAI/Anthropic.
+  timeout_seconds: 1200
+  # model: your-model           # Omit to use Codex's default model.
+  # codex:
+  #   binary: codex             # Executable on PATH, or an absolute path.
+  #   sandbox: workspace-write  # Native default; Compose supplies container isolation.
+  #   network_access: true      # Controls networking in workspace-write mode.
 
 instructions: |
-  Keep the Rust SDK aligned with the official documentation.
-  Preserve public APIs and add meaningful offline contract tests for changes.
+  Inspect this repository for a small, useful maintenance improvement.
+  Preserve its conventions and public behavior. Add tests for behavior changes.
+  Use the configured checks. Leave the repository unchanged if no work is needed.
+
+# Optional: read documentation before each run. Leave empty for repository-only work.
+sources: []
 
 editable:
   root_files: [README.md]
   markdown_dirs: [docs]
-  source_dirs: [src, crates]
-  extensions: [.rs, .md, .json]
+  source_dirs: [src, tests]
+  extensions: [.rs, .py, .js, .jsx, .ts, .tsx, .go, .md, .json]
 
-rust:
-  msrv: 1.88.0
-  # crates: [my-sdk]           # Optional names for checks scoped to a package.
-  # package_check: scripts/verify-packages
+validation:
+  profile: custom               # rust retains the bundled Cargo validation suite.
+  # Add dependency installation commands here when needed (e.g. npm ci).
+  setup: []
+  checks:
+    - name: whitespace
+      command: [git, diff, --check]
+      timeout_seconds: 60
+    # Add your repository's test/lint/build commands before unattended code work.
+    # - name: tests
+    #   command: [npm, test]
+    #   working_directory: .
+    #   timeout_seconds: 300

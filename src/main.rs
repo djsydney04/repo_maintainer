@@ -1,9 +1,8 @@
 use anyhow::{Context, Result, ensure};
 use clap::{Parser, ValueEnum};
 use repo_maintainer::{
-    agent,
     config::{self, Config},
-    documentation, process, workflow,
+    documentation, process, runner, validation, workflow,
 };
 use std::{
     fs,
@@ -17,6 +16,8 @@ enum Command {
     #[default]
     Check,
     Run,
+    Setup,
+    Validate,
     Smoke,
     Prepare,
     Agent,
@@ -29,7 +30,7 @@ enum Command {
 #[derive(Parser)]
 #[command(
     version,
-    about = "Maintain repositories against official docs with a bounded Rust agent"
+    about = "Run coding agents on your infrastructure with configured repository checks"
 )]
 struct Cli {
     #[arg(value_enum, default_value = "check")]
@@ -73,7 +74,7 @@ fn execute(cli: Cli) -> Result<()> {
                 use std::io::Write;
                 file.write_all(include_bytes!("../maintainer.example.yml"))?;
                 println!(
-                    "Created {}. Edit its docs sources and provider, then run repo-maintainer check.",
+                    "Created {}. Configure the task, agent and project checks, then run repo-maintainer check.",
                     path.display()
                 );
             }
@@ -107,13 +108,27 @@ fn execute(cli: Cli) -> Result<()> {
     match cli.command {
         Command::Init => unreachable!(),
         Command::Check => println!(
-            "Configuration valid: {}\nProvider: {} / {}\nDocumentation sources: {}\nNo API request made.",
+            "Configuration valid: {}\nRunner: {}\nProvider: {} / {}\nValidation: {}\nDocumentation sources: {}\nNo API request made.",
             config.name,
+            config.agent.runner,
             config.agent.provider,
-            config.agent.model.as_deref().unwrap(),
+            config.agent.model.as_deref().unwrap_or("CLI default"),
+            config.validation.profile,
             config.sources.len()
         ),
         Command::Run => workflow::proposal(&config, &cli.repo, &artifacts)?,
+        Command::Setup => validation::setup(&config, cli.source.as_deref().unwrap_or(&cli.repo))?,
+        Command::Validate => {
+            if let Some(source) = &cli.source {
+                workflow::validate(&config, source, &artifacts)?;
+            } else {
+                validation::setup(&config, &cli.repo)?;
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&validation::validate(&config, &cli.repo)?)?
+                );
+            }
+        }
         Command::Smoke => workflow::smoke(&config, &artifacts)?,
         Command::Prepare => {
             fs::create_dir_all(&artifacts)?;
@@ -126,7 +141,7 @@ fn execute(cli: Cli) -> Result<()> {
                 "Prompt exceeds 256 KB"
             );
             let prompt = fs::read_to_string(prompt_path)?;
-            match agent::run(&config, source()?, &prompt, &environment, false) {
+            match runner::run(&config, source()?, &prompt, &environment, false) {
                 Ok(value) => println!("{}", serde_json::to_string(&value)?),
                 Err(error) => {
                     println!(

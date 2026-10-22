@@ -37,7 +37,7 @@ fn unsafe_configuration_is_rejected() {
         "instructions_file: ../secret\n",
         "editable:\n  source_dirs: [/etc]\n",
         "rust:\n  crates: ['--unsafe']\n",
-        "version: 2\n",
+        "version: 3\n",
         "version: true\n",
         "sources: [123]\n",
         "ci_workflow: |\n  bad\n  path\n",
@@ -121,6 +121,7 @@ fn binary_init_and_check_need_no_api_key_and_keep_existing_config() {
         Command::new(env!("CARGO_BIN_EXE_repo-maintainer"))
             .args([command, "--repo", temp.path().to_str().unwrap()])
             .env_remove("MAINTENANCE_CONFIG")
+            .env("MAINTENANCE_RUNNER", "")
             .env("MAINTENANCE_PROVIDER", "")
             .env("MAINTENANCE_MODEL", "")
             .env("MAINTENANCE_ALLOW_PAID", "")
@@ -145,4 +146,85 @@ fn binary_init_and_check_need_no_api_key_and_keep_existing_config() {
         String::from_utf8_lossy(&result.stderr)
     );
     assert!(String::from_utf8_lossy(&result.stdout).contains("No API request made"));
+}
+
+#[test]
+fn switching_to_codex_does_not_reuse_a_builtin_provider_model() {
+    let config = Config::from_str(
+        "agent:\n  provider: groq\n  model: openai/gpt-oss-120b\n",
+        &Environment::from([
+            ("MAINTENANCE_RUNNER".into(), "codex".into()),
+            ("MAINTENANCE_ALLOW_PAID".into(), "true".into()),
+        ]),
+    )
+    .unwrap();
+    assert_eq!(config.agent.runner, "codex");
+    assert!(config.agent.model.is_none());
+}
+
+#[test]
+fn version_two_defaults_to_general_codex_work_without_changing_legacy_defaults() {
+    let modern = Config::from_str(
+        "version: 2\nagent: {allow_paid: true}\n",
+        &Environment::new(),
+    )
+    .unwrap();
+    assert_eq!(modern.agent.runner, "codex");
+    assert_eq!(modern.validation.profile, "custom");
+    assert_eq!(
+        modern.validation.checks[0].command,
+        ["git", "diff", "--check"]
+    );
+    assert!(modern.sources.is_empty());
+    assert!(modern.agent.codex.network_access);
+    assert!(modern.editable.extensions.contains(&".py".into()));
+    assert!(modern.editable.source_dirs.contains(&"tests".into()));
+    let legacy = Config::from_str("version: 1\n", &Environment::new()).unwrap();
+    assert_eq!(legacy.agent.runner, "builtin");
+    assert_eq!(legacy.validation.profile, "rust");
+    assert!(!legacy.agent.codex.network_access);
+    assert!(Config::from_str("version: 2\n", &Environment::new()).is_err());
+}
+
+#[test]
+fn version_two_preserves_explicit_runner_checks_and_network_restrictions() {
+    let config = Config::from_str(
+        r#"
+version: 2
+agent:
+  runner: builtin
+  provider: groq
+  codex: {network_access: false}
+validation: {profile: rust}
+editable: {extensions: [.txt]}
+"#,
+        &Environment::new(),
+    )
+    .unwrap();
+    assert_eq!(config.agent.runner, "builtin");
+    assert_eq!(config.validation.profile, "rust");
+    assert!(!config.agent.codex.network_access);
+    assert_eq!(config.editable.extensions, [".txt"]);
+}
+
+#[test]
+fn container_sandbox_default_respects_explicit_policy_and_legacy_configs() {
+    let environment = Environment::from([(
+        "MAINTENANCE_CODEX_SANDBOX_DEFAULT".into(),
+        "danger-full-access".into(),
+    )]);
+    for (extra, expected) in [
+        ("", "danger-full-access"),
+        ("  codex: {sandbox: workspace-write}\n", "workspace-write"),
+        ("  codex: {network_access: false}\n", "workspace-write"),
+    ] {
+        let config = Config::from_str(
+            &format!("version: 2\nagent:\n  allow_paid: true\n{extra}"),
+            &environment,
+        )
+        .unwrap();
+        assert_eq!(config.agent.codex.sandbox, expected);
+    }
+    let legacy = Config::from_str("version: 1\n", &environment).unwrap();
+    assert_eq!(legacy.agent.codex.sandbox, "workspace-write");
 }

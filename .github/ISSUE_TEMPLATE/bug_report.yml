@@ -23,8 +23,8 @@ body:
   - type: input
     id: provider
     attributes:
-      label: Provider and model
-      placeholder: groq / openai/gpt-oss-120b
+      label: Runner, provider and model
+      placeholder: codex / CLI default, or builtin / groq / openai/gpt-oss-120b
   - type: textarea
     id: expected
     attributes:

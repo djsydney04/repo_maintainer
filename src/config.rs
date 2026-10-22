@@ -21,6 +21,12 @@ fn default_provider() -> String {
 fn requests() -> u8 {
     16
 }
+fn runner() -> String {
+    text("builtin")
+}
+fn agent_timeout() -> u64 {
+    1200
+}
 fn version() -> u8 {
     1
 }
@@ -34,32 +40,86 @@ fn issue() -> String {
     text("Repository maintenance needs help")
 }
 fn commit() -> String {
-    text("fix: maintain documented SDK compatibility")
+    text("fix: maintain repository")
 }
 fn workflow() -> String {
     text("ci.yml")
 }
 fn instructions() -> String {
     text(
-        "Maintain the repository against the official documentation sources. Implement focused, compatible changes with meaningful offline tests.",
+        "Maintain the repository with focused, compatible improvements and meaningful tests. Use configured references when available.",
     )
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Agent {
+    pub runner: String,
     pub provider: String,
     pub model: Option<String>,
     pub allow_paid: bool,
     pub max_requests: u8,
+    pub timeout_seconds: u64,
+    pub codex: Codex,
+}
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Codex {
+    pub binary: String,
+    pub sandbox: String,
+    pub network_access: bool,
+}
+impl Default for Codex {
+    fn default() -> Self {
+        Self {
+            binary: text("codex"),
+            sandbox: text("workspace-write"),
+            network_access: false,
+        }
+    }
 }
 impl Default for Agent {
     fn default() -> Self {
         Self {
+            runner: runner(),
             provider: default_provider(),
             model: None,
             allow_paid: false,
             max_requests: requests(),
+            timeout_seconds: agent_timeout(),
+            codex: Codex::default(),
+        }
+    }
+}
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Check {
+    pub name: String,
+    pub command: Vec<String>,
+    #[serde(default = "working_directory")]
+    pub working_directory: String,
+    #[serde(default = "check_timeout")]
+    pub timeout_seconds: u64,
+}
+fn working_directory() -> String {
+    text(".")
+}
+fn check_timeout() -> u64 {
+    300
+}
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Validation {
+    pub profile: String,
+    pub setup: Vec<Check>,
+    pub checks: Vec<Check>,
+}
+impl Default for Validation {
+    fn default() -> Self {
+        Self {
+            profile: text("rust"),
+            setup: vec![],
+            checks: vec![],
         }
     }
 }
@@ -104,6 +164,7 @@ pub struct Config {
     pub version: u8,
     #[serde(default = "name")]
     pub name: String,
+    #[serde(default)]
     pub sources: Vec<String>,
     #[serde(default)]
     pub official_hosts: Vec<String>,
@@ -117,6 +178,8 @@ pub struct Config {
     pub editable: Editable,
     #[serde(default)]
     pub rust: Rust,
+    #[serde(default)]
+    pub validation: Validation,
     #[serde(default = "prefix")]
     pub branch_prefix: String,
     #[serde(default = "issue")]
@@ -162,6 +225,67 @@ fn strings(values: &[String], empty: bool) -> Result<()> {
 }
 impl Agent {
     pub fn resolve(&mut self, env: &Environment) -> Result<Profile> {
+        let old_runner = self.runner.clone();
+        if let Some(value) = env.get("MAINTENANCE_RUNNER").filter(|s| !s.is_empty()) {
+            self.runner = value.clone();
+        }
+        if self.runner != old_runner {
+            self.model = None;
+        }
+        ensure!(
+            ["builtin", "codex"].contains(&self.runner.as_str()),
+            "agent.runner must be builtin or codex"
+        );
+        ensure!(
+            (1..=3600).contains(&self.timeout_seconds),
+            "agent.timeout_seconds must be between 1 and 3600"
+        );
+        ensure!(
+            (1..=16).contains(&self.max_requests),
+            "agent.max_requests must be between 1 and 16"
+        );
+        ensure!(
+            !self.codex.binary.is_empty()
+                && self.codex.binary.len() <= 2000
+                && !self.codex.binary.contains(['\n', '\r', '\0']),
+            "Invalid Codex executable"
+        );
+        ensure!(
+            ["read-only", "workspace-write", "danger-full-access"]
+                .contains(&self.codex.sandbox.as_str()),
+            "Invalid Codex sandbox"
+        );
+        if let Some(paid) = env.get("MAINTENANCE_ALLOW_PAID").filter(|s| !s.is_empty()) {
+            self.allow_paid = match paid.as_str() {
+                "true" => true,
+                "false" => false,
+                _ => bail!("MAINTENANCE_ALLOW_PAID must be true or false"),
+            };
+        }
+        if self.runner == "codex" {
+            ensure!(
+                self.allow_paid,
+                "Codex requires agent.allow_paid: true to use the configured account"
+            );
+            ensure!(
+                env.get("MAINTENANCE_PROVIDER")
+                    .is_none_or(|s| s.is_empty() || s == "openai"),
+                "Codex uses its own authentication; MAINTENANCE_PROVIDER applies to the builtin runner"
+            );
+            self.provider = text("openai");
+            if let Some(model) = env.get("MAINTENANCE_MODEL").filter(|s| !s.is_empty()) {
+                self.model = Some(model.clone());
+            }
+            if let Some(model) = &self.model {
+                ensure!(
+                    !model.is_empty()
+                        && model.len() <= 200
+                        && !model.chars().any(char::is_whitespace),
+                    "agent.model must be a model ID"
+                );
+            }
+            return Ok(profiles().remove("openai").unwrap());
+        }
         let old = if self.provider == "oai" {
             "openai"
         } else {
@@ -242,15 +366,85 @@ impl Config {
         // Reject duplicate keys in the YAML parser before materializing a map.
         // An untyped intermediate preserves quoted strings as strings; the
         // second step enforces exact bool/integer/string types with Serde JSON.
-        let value: serde_json::Value = serde_saphyr::from_str_with_options(raw, options)
+        let mut value: serde_json::Value = serde_saphyr::from_str_with_options(raw, options)
             .context("Invalid YAML/JSON configuration")?;
+        // New configurations use the general worker. Version 1 (including
+        // files without a version) keeps its established Rust/builtin defaults.
+        if value.get("version") == Some(&serde_json::json!(2)) {
+            let root = value
+                .as_object_mut()
+                .context("Expected a configuration object")?;
+            let agent = root
+                .entry("agent")
+                .or_insert_with(|| serde_json::json!({}))
+                .as_object_mut()
+                .context("agent must be an object")?;
+            agent
+                .entry("runner")
+                .or_insert_with(|| serde_json::json!("codex"));
+            let codex = agent
+                .entry("codex")
+                .or_insert_with(|| serde_json::json!({}))
+                .as_object_mut()
+                .context("agent.codex must be an object")?;
+            codex
+                .entry("network_access")
+                .or_insert_with(|| serde_json::json!(true));
+            // Docker Compose supplies external isolation. A configured YAML
+            // sandbox or restricted network request still takes precedence.
+            let sandbox = if codex.get("network_access") == Some(&serde_json::json!(false)) {
+                "workspace-write"
+            } else {
+                env.get("MAINTENANCE_CODEX_SANDBOX_DEFAULT")
+                    .filter(|s| !s.is_empty())
+                    .map(String::as_str)
+                    .unwrap_or("workspace-write")
+            };
+            codex
+                .entry("sandbox")
+                .or_insert_with(|| serde_json::json!(sandbox));
+            let validation = root
+                .entry("validation")
+                .or_insert_with(|| serde_json::json!({}))
+                .as_object_mut()
+                .context("validation must be an object")?;
+            validation
+                .entry("profile")
+                .or_insert_with(|| serde_json::json!("custom"));
+            if validation.get("profile") == Some(&serde_json::json!("custom")) {
+                validation.entry("checks").or_insert_with(|| {
+                    serde_json::json!([{
+                        "name":"whitespace", "command":["git","diff","--check"],
+                        "timeout_seconds":60
+                    }])
+                });
+            }
+            let editable = root
+                .entry("editable")
+                .or_insert_with(|| serde_json::json!({}))
+                .as_object_mut()
+                .context("editable must be an object")?;
+            for (name, default) in [
+                ("root_files", serde_json::json!(["README.md"])),
+                ("markdown_dirs", serde_json::json!(["docs"])),
+                ("source_dirs", serde_json::json!(["src", "tests", "crates"])),
+                (
+                    "extensions",
+                    serde_json::json!([
+                        ".rs", ".py", ".js", ".jsx", ".ts", ".tsx", ".go", ".md", ".json"
+                    ]),
+                ),
+            ] {
+                editable.entry(name).or_insert(default);
+            }
+        }
         let mut config: Self =
             serde_json::from_value(value).context("Invalid configuration fields")?;
         ensure!(
-            config.version == 1,
+            [1, 2].contains(&config.version),
             "Unsupported maintainer configuration version"
         );
-        strings(&config.sources, false)?;
+        strings(&config.sources, true)?;
         let mut hosts = vec![];
         for source in &config.sources {
             let url = Url::parse(source)?;
@@ -270,7 +464,7 @@ impl Config {
         if config.official_hosts.is_empty() {
             config.official_hosts = hosts.clone();
         }
-        strings(&config.official_hosts, false)?;
+        strings(&config.official_hosts, true)?;
         for host in &config.official_hosts {
             ensure!(
                 Url::parse(&format!("https://{host}/"))?.host_str() == Some(host.as_str())
@@ -339,6 +533,48 @@ impl Config {
             config.instructions.chars().count() <= 16_000,
             "instructions exceeds 16000 characters"
         );
+        ensure!(
+            ["rust", "custom"].contains(&config.validation.profile.as_str()),
+            "validation.profile must be rust or custom"
+        );
+        ensure!(
+            config.validation.profile != "custom" || !config.validation.checks.is_empty(),
+            "Custom validation requires at least one named check"
+        );
+        ensure!(
+            config.validation.setup.len() <= 20 && config.validation.checks.len() <= 20,
+            "At most 20 setup commands and checks are allowed"
+        );
+        let mut names = std::collections::HashSet::new();
+        let check_name = Regex::new(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")?;
+        for check in config
+            .validation
+            .setup
+            .iter()
+            .chain(&config.validation.checks)
+        {
+            ensure!(
+                check_name.is_match(&check.name) && names.insert(&check.name),
+                "Check names must be unique simple identifiers"
+            );
+            strings(&check.command, false)?;
+            ensure!(
+                check
+                    .command
+                    .iter()
+                    .all(|s| !s.contains(['\n', '\r', '\0']))
+                    && !check.command[0].starts_with('-'),
+                "Invalid check command arguments"
+            );
+            ensure!(
+                check.working_directory == "." || relative_path(&check.working_directory),
+                "Check working_directory must be repository-relative"
+            );
+            ensure!(
+                (1..=1800).contains(&check.timeout_seconds),
+                "Check timeout_seconds must be between 1 and 1800"
+            );
+        }
         config.agent.resolve(env)?;
         Ok(config)
     }

@@ -2,16 +2,17 @@
 
 [← Overview](../README.md) · [Configuration](configuration.md)
 
-Repo Maintainer turns the documentation sources and boundaries you specify into
-one focused proposal. A native Rust agent provides explicit tools, while Rust
-workflow commands handle validation and GitHub writes. Neither the executable
-nor the Docker image requires Python or Node.
+Repo Maintainer turns a scheduled repository task into a focused proposal.
+A Rust orchestrator selects Codex CLI or the built-in agent, carries the patch
+through independent project checks, and publishes a PR. The scheduler and
+worker can live on your own infrastructure. References are optional; Rust SDK
+maintenance is one supported task profile.
 
-## Cloud workflow
+## Scheduled workflow
 
 ```mermaid
 flowchart LR
-    A["Official docs + existing PR feedback"] --> B["Propose: inspect, edit, repair"]
+    A["Task + optional references + PR feedback"] --> B["Propose: inspect, edit, repair"]
     B --> C["Fresh runner: validate exact patch"]
     C --> D["Publish: open or update a PR"]
     B --> E["New blocker: assigned issue"]
@@ -25,14 +26,21 @@ flowchart LR
 | Stage | Work | Access |
 | --- | --- | --- |
 | Propose | Read official docs and review/CI feedback; inspect, edit and repair files; export a patch/report | Selected model key and read-only GitHub token |
-| Validate | Apply the patch to its original revision; check boundaries and run Rust validation | Fresh runner; no model key or GitHub write token |
+| Validate | Apply the patch to its original revision; run configured setup/checks; record patch/config hashes | Fresh runner; no model key or GitHub write token |
 | Publish | Reapply the validated patch, commit, open/update one assigned PR, dispatch target CI | Short-lived GitHub write token; no model key |
 | Notify | Report a new failure, stay quiet for an identical blocker, close the issue on recovery | Issue-write permission |
 
-The agent has file tools, an official-reference tool, and fixed offline Rust
-checks. It has no general shell, repository plugins, subagents or GitHub-write
-tools. Provider keys are removed from its environment before source tools and
-checks run. Independent validation must succeed before publishing.
+The builtin agent has file/reference tools and a named check tool. Its commands
+come from trusted configuration, and the Rust profile retains fixed offline
+Cargo repair checks. Codex uses its CLI tools and shell under the selected
+sandbox instead; it returns a schema-validated result. Both feed the same
+proposal guard. GitHub tokens are not passed to Codex; check/setup commands use
+a restricted environment without model/GitHub keys. See [execution boundaries](../SECURITY.md).
+
+Publishing requires `validation.json`: a successful check list bound to source
+revision, patch hash and resolved configuration hash. A failed validation attempt
+removes any previous receipt. Checks that rewrite the proposed files fail
+validation. The publishing job verifies the receipt before applying the patch.
 
 The bot never force pushes, merges, releases or deploys. A human reviews the
 resulting PR. Existing maintenance PRs receive review/CI feedback on later runs.
@@ -42,9 +50,10 @@ resulting PR. Existing maintenance PRs receive review/CI feedback on later runs.
 | Boundary | Limit |
 | --- | --- |
 | Proposed patch | 25 regular files; 500 KB |
-| Model requests | At most 16, including summaries; configurable downward |
-| Agent deadline | 20 minutes |
-| One agent Rust check | 5 minutes |
+| Builtin model requests | At most 16, including summaries; configurable downward |
+| Agent deadline | 20 minutes by default; configurable from 1 second to 60 minutes |
+| One builtin Rust check | 5 minutes |
+| Configured setup/check command | 5 minutes by default; configurable up to 30 minutes |
 | Live diagnostic | 6 requests; 8-minute agent deadline |
 | Cloud proposal retention | 30 days |
 
@@ -62,24 +71,35 @@ preferences control delivery.
 
 The container reads the target repository's committed HEAD through a read-only
 mount, creates a temporary working copy, fetches Rust dependencies, and asks the
-agent for a proposal. A writable output mount receives the patch and report.
+selected coding agent for a proposal. A writable output mount receives the patch and report.
 You decide whether to apply it. Local Docker runs do not publish PRs or create
 a recurring schedule.
 
 The native `repo-maintainer run` command uses the same temporary-clone and patch
-workflow. It requires Git and the Rust check tools in your shell environment.
+workflow. It requires Git, your selected agent and project check tools in the worker environment.
 Unlike Compose, it does not load a `.env` file automatically.
 
-The Docker image contains the runtime and check tools. API keys are supplied at
+The Docker image contains the maintainer and native Codex CLI; its base image
+supplies the project runtime. Rust is the default; Node/Python/Go images are configurable. API keys are supplied at
 runtime, and the build context excludes local environment files. The wrapper
 handles user IDs, repository/output paths and preserving an existing config.
 
 ## Deployment and model tests
 
 The shared CI checks formatting, linting and Rust tests on Linux and macOS with
-stable Rust and Rust 1.89, then builds/runs the Docker image. Tests exercise HTTP
+stable Rust and Rust 1.89, then builds/runs Rust and Node Docker images.
+The Node runtime is checked without Cargo installed. Tests exercise HTTP
 authentication, provider tool continuations, real offline Cargo repair, patch
-transfer and notification behavior with simulated model responses.
+transfer and notification behavior with simulated model responses. Codex tests
+use a simulated CLI process to exercise structured output, credential filtering,
+non-Rust patch transfer, checks, timeouts and stale-receipt rejection.
 These offline tests do not demonstrate account quota or live model quality.
 The optional `smoke.yml` instead verifies a real key, file editing and test repair
 in a disposable Rust fixture; paid providers require explicit opt-in and keys.
+
+## Your scheduler and infrastructure
+
+The reusable workflow accepts `runner_labels` for GitHub-hosted or self-hosted
+workers. Native/Docker commands can also be invoked by cron, systemd or a job
+queue. They do not create a timer or daemon. See [self-hosting](self-hosting.md)
+for the full PR pipeline and stage-by-stage integration.

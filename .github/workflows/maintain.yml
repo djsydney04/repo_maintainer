@@ -22,6 +22,18 @@ on:
       owner:
         type: string
         default: ''
+      runner_labels:
+        description: JSON array of GitHub runner labels; use self-hosted labels for your infrastructure
+        type: string
+        default: '["ubuntu-latest"]'
+      agent_runner:
+        description: Optional builtin or codex override
+        type: string
+        default: ''
+      install_codex:
+        description: Install the pinned native Codex binary for the proposal job
+        type: boolean
+        default: false
     secrets:
       GEMINI_API_KEY:
         required: false
@@ -33,16 +45,21 @@ on:
         required: false
       SDK_MAINTENANCE_API_KEY:
         required: false
+      MAINTENANCE_API_KEY:
+        required: false
+      CODEX_API_KEY:
+        required: false
 permissions:
   contents: read
 concurrency:
-  group: weekly-sdk-maintenance
+  group: repository-maintenance-${{ inputs.config_path }}
   cancel-in-progress: false
 env:
   DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
   MAINTENANCE_OWNER: ${{ inputs.owner || github.repository_owner }}
   RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
   MAINTENANCE_PROVIDER: ${{ inputs.provider }}
+  MAINTENANCE_RUNNER: ${{ inputs.agent_runner }}
   MAINTENANCE_MODEL: ${{ inputs.model }}
   MAINTENANCE_ALLOW_PAID: ${{ inputs.allow_paid && 'true' || '' }}
   MAINTENANCE_CONFIG: ${{ github.workspace }}/consumer/${{ inputs.config_path }}
@@ -50,8 +67,8 @@ env:
 jobs:
   propose:
     if: github.ref_name == github.event.repository.default_branch
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    timeout-minutes: 90
     permissions:
       contents: read
       pull-requests: read
@@ -61,6 +78,7 @@ jobs:
       status: ${{ steps.collect.outputs.status }}
       msrv: ${{ steps.prepare.outputs.msrv }}
       package_check: ${{ steps.prepare.outputs.package_check }}
+      validation_profile: ${{ steps.prepare.outputs.validation_profile }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -91,22 +109,31 @@ jobs:
           path: source
           persist-credentials: false
       - name: Install Rust check tools
+        if: steps.prepare.outputs.validation_profile == 'rust'
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
           rustup component add rustfmt clippy
-          cargo fetch --manifest-path source/Cargo.toml --locked
-      - name: Inspect, edit, test and repair using Rust
+      - name: Install the native Codex binary
+        if: steps.prepare.outputs.runner == 'codex' && inputs.install_codex
+        run: |
+          bash automation/scripts/install-codex.sh "$RUNNER_TEMP/maintainer-tools/bin"
+          echo "$RUNNER_TEMP/maintainer-tools/bin" >> "$GITHUB_PATH"
+      - name: Prepare repository dependencies
+        run: automation/target/release/repo-maintainer setup --source source
+      - name: Inspect, edit, test and repair using the selected coding agent
         id: agent
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           SDK_MAINTENANCE_API_KEY: ${{ secrets.SDK_MAINTENANCE_API_KEY }}
+          MAINTENANCE_API_KEY: ${{ secrets.MAINTENANCE_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
         run: |
           status=0
-          timeout --kill-after=30s 21m automation/target/release/repo-maintainer agent \
+          automation/target/release/repo-maintainer agent \
             --source source --prompt "$RUNNER_TEMP/proposal/brief.md" \
             > "$RUNNER_TEMP/agent-result.json" 2> "$RUNNER_TEMP/agent-stderr.log" || status=$?
           echo "exit-code=$status" >> "$GITHUB_OUTPUT"
@@ -123,7 +150,7 @@ jobs:
         if: always() && steps.prepare.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: sdk-maintenance-proposal
+          name: repository-maintenance-proposal
           path: |
             ${{ runner.temp }}/proposal/request.json
             ${{ runner.temp }}/proposal/report.json
@@ -133,8 +160,8 @@ jobs:
   validate:
     needs: propose
     if: needs.propose.outputs.status == 'changed'
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -157,10 +184,11 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: sdk-maintenance-proposal
+          name: repository-maintenance-proposal
           path: ${{ runner.temp }}/proposal
       - run: automation/target/release/repo-maintainer apply --source source --artifacts "$RUNNER_TEMP/proposal"
       - name: Install validation tools
+        if: needs.propose.outputs.validation_profile == 'rust'
         env:
           RUST_MSRV: ${{ needs.propose.outputs.msrv }}
         run: |
@@ -168,24 +196,17 @@ jobs:
           rustup default stable
           rustup component add rustfmt clippy
           cargo install cargo-audit --version 0.22.2 --locked
-      - name: Run the Linux CI checks against the proposed changes
-        working-directory: source
-        env:
-          RUSTDOCFLAGS: -D warnings
-          RUST_MSRV: ${{ needs.propose.outputs.msrv }}
-          PACKAGE_CHECK: ${{ needs.propose.outputs.package_check }}
-        run: |
-          cargo fmt --all --check
-          cargo test --workspace --all-targets --locked
-          cargo test --workspace --doc --locked
-          cargo clippy --workspace --all-targets --locked -- -D warnings
-          cargo doc --workspace --no-deps --locked
-          cargo "+$RUST_MSRV" check --workspace --all-targets --locked
-          if [ -n "$PACKAGE_CHECK" ]; then "./$PACKAGE_CHECK"; fi
-          cargo audit --deny warnings
+      - name: Run configured checks and record validation of this exact patch
+        run: automation/target/release/repo-maintainer validate --source source --artifacts "$RUNNER_TEMP/proposal"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: repository-maintenance-validation
+          path: ${{ runner.temp }}/proposal/validation.json
+          retention-days: 30
+          if-no-files-found: error
   publish:
     needs: [propose, validate]
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
     timeout-minutes: 10
     permissions:
       contents: write
@@ -214,7 +235,11 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: sdk-maintenance-proposal
+          name: repository-maintenance-proposal
+          path: ${{ runner.temp }}/proposal
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: repository-maintenance-validation
           path: ${{ runner.temp }}/proposal
       - name: Open or update a PR and dispatch full CI
         env:
@@ -223,7 +248,7 @@ jobs:
   notify:
     needs: [propose, validate, publish]
     if: always() && github.ref_name == github.event.repository.default_branch
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
     timeout-minutes: 10
     permissions:
       contents: read
@@ -247,7 +272,7 @@ jobs:
         continue-on-error: true
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: sdk-maintenance-proposal
+          name: repository-maintenance-proposal
           path: ${{ runner.temp }}/proposal
       - name: Notify only for a new blocker or a recovered run
         env:

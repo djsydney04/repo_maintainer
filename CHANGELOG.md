@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Default new version-2 configurations to a general Codex worker, custom project
+  checks and outbound tool access. Add Docker private networks, DNS, proxies and
+  verified custom CA trust; preserve version-1 defaults.
+- Add Codex CLI as a coding-agent runner with structured output, explicit account
+  opt-in, sandbox selection and bounded execution.
+- Add language-independent setup/check commands and optional documentation sources;
+  preserve existing Rust profiles and version-1 configurations.
+- Run the full PR pipeline on configurable self-hosted runner labels. Bind
+  publishing to a validation receipt for the exact patch and configuration.
+- Add native Codex installation, project-specific Docker base images, use cases,
+  and Node/Python/Go/documentation examples alongside Prism's Rust SDK example.
 - Replace the Python orchestrator and JavaScript/Pi agent with one Rust binary,
   including native provider APIs, bounded source tools and workflow commands.
 - Preserve version-1 YAML/JSON configuration, paid-provider opt-in, request limits,
