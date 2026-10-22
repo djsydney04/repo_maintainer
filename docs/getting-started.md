@@ -4,7 +4,8 @@
 
 Choose the native executable or Docker for a reviewable local patch, or a weekly
 GitHub workflow for tested pull requests. All use the same `.maintainer.yml` configuration.
-The current profile supports Rust SDK workspaces.
+Use [self-hosted runners](self-hosting.md) for the complete pipeline on your own
+infrastructure. Choose a [task/language example](use-cases.md#starting-configurations).
 
 ## Native executable
 
@@ -14,18 +15,18 @@ Install Rust 1.89 or newer and Git, then build the command from this repository:
 git clone https://github.com/djsydney04/repo_maintainer.git
 cd repo_maintainer
 cargo install --locked --path .
-cd /path/to/your-rust-repository
+cd /path/to/your-repository
 repo-maintainer init
-# Edit .maintainer.yml and export the selected provider's API key.
+# Configure the task, project checks and agent account.
 repo-maintainer check
 repo-maintainer run
 ```
 
 The executable uses your shell environment. Docker Compose alone loads the
-shared checkout's `.env` file. Native runs require Rust and Git at runtime for
-repository checks; they use neither Python nor Node. Install rustfmt and Clippy
-for the toolchain you use. The maintained repository may have its own optional
-package-check executable with additional requirements.
+shared checkout's `.env` file. Install Git, the chosen coding agent, and the project tools used by your checks.
+Codex uses its worker login or `CODEX_API_KEY`; the builtin agent uses its selected
+model provider key. Rust target checks need rustfmt/Clippy; custom profiles can
+use Node, Python, Go or other project tools without Cargo files.
 
 `run` clones committed HEAD into a temporary directory and leaves your working
 tree alone. Review `.maintainer-output/<run>/report.json` and `proposal.patch`.
@@ -39,13 +40,14 @@ repository you want to maintain:
 
 ```sh
 git clone https://github.com/djsydney04/repo_maintainer.git
-cd /path/to/your-rust-repository
+cd /path/to/your-repository
 /path/to/repo_maintainer/maintainer init
 ```
 
-Edit the generated `.maintainer.yml`: replace the docs sources, describe the
-maintenance task, and review the editable paths. Select a provider and supply
-its key in your shell environment or in the shared checkout's ignored `.env`
+Edit the generated `.maintainer.yml`: describe the maintenance task, select the
+agent, set project checks, and review the editable paths. External documentation
+sources are optional. Supply the selected agent's
+key in your shell environment or in the shared checkout's ignored `.env`
 file, using [`.env.example`](../.env.example) as the starting point. Keep real
 keys out of your repository and Dockerfile.
 
@@ -75,7 +77,7 @@ generates a proposal; it does not open a GitHub PR or install a schedule.
 From the shared checkout, provide explicit paths:
 
 ```sh
-REPOSITORY_PATH=/path/to/your-rust-repository \
+REPOSITORY_PATH=/path/to/your-repository \
 MAINTAINER_OUTPUT_PATH=/path/to/output \
 MAINTAINER_UID=$(id -u) MAINTAINER_GID=$(id -g) \
   docker compose run --build --rm maintainer check
@@ -87,7 +89,9 @@ the convenient way to handle paths and permissions automatically.
 
 For a direct image, build `Dockerfile` and mount the target at `/repository`
 read-only and a writable directory at `/output`. Pass keys at runtime; do not
-add them to image layers. The default command is `check`.
+add them to image layers. The default command is `check`. The default image includes native Codex; set
+`MAINTAINER_RUNTIME_IMAGE` to a Debian-based Node/Python/Go image when needed.
+See [container configuration](self-hosting.md#docker-with-your-projects-tools).
 
 ## Weekly cloud maintenance
 
@@ -117,11 +121,14 @@ jobs:
       pull-requests: write
       issues: write
       actions: write
-    uses: djsydney04/repo_maintainer/.github/workflows/maintain.yml@7038a20127fd1635f9de7f82c4ef952eb8712ca9
+    uses: djsydney04/repo_maintainer/.github/workflows/maintain.yml@bb53d51b6ec4e7140a5d8d7aed2a78c44899488c
     with:
-      maintainer_ref: 7038a20127fd1635f9de7f82c4ef952eb8712ca9
+      maintainer_ref: bb53d51b6ec4e7140a5d8d7aed2a78c44899488c
       config_path: .maintainer.yml
+      install_codex: true
     secrets:
+      CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
+      MAINTENANCE_API_KEY: ${{ secrets.MAINTENANCE_API_KEY }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -129,8 +136,8 @@ jobs:
       SDK_MAINTENANCE_API_KEY: ${{ secrets.SDK_MAINTENANCE_API_KEY }}
 ```
 
-This example pins a published Rust implementation commit. Keep `uses` and
-`maintainer_ref` on the **same full SHA** when updating. A change to the shared
+Both references pin the same implementation commit. Review it before enabling
+a schedule, and keep `uses` and `maintainer_ref` on the same full SHA when updating. A change to the shared
 repository only affects your bot after you update that pin.
 
 The example runs Mondays at 9 AM Pacific, including DST. Change the cron and

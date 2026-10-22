@@ -1,0 +1,25 @@
+# Commit a copy under .github/workflows/ in the repository you want to maintain.
+# Review the pinned commit; update both full SHA references together when upgrading.
+name: Scheduled repository maintenance
+on:
+  schedule:
+    - cron: '0 9 * * 1'
+      timezone: America/Los_Angeles
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  maintain:
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: write
+    uses: djsydney04/repo_maintainer/.github/workflows/maintain.yml@bb53d51b6ec4e7140a5d8d7aed2a78c44899488c
+    with:
+      maintainer_ref: bb53d51b6ec4e7140a5d8d7aed2a78c44899488c
+      config_path: .maintainer.yml
+      runner_labels: '["self-hosted", "linux", "x64", "repo-maintainer"]'
+      install_codex: true
+    secrets:
+      CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}

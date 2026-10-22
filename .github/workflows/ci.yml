@@ -7,7 +7,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: maintainer-ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
   changes:
@@ -77,11 +77,22 @@ jobs:
           cargo clippy --locked --all-targets -- -D warnings
       - name: Test and validate configuration without API credentials
         run: |
-          cargo test --locked
+          env -u GITHUB_OUTPUT cargo test --locked
           cargo run --locked -- check --config maintainer.example.yml
   docker:
     needs: changes
     if: needs.changes.outputs.docker == 'true'
+    name: Docker (${{ matrix.runtime }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runtime: generic
+            image: debian:bookworm-slim
+          - runtime: rust
+            image: rust:1.89-slim-bookworm
+          - runtime: node
+            image: node:24-bookworm
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -90,22 +101,52 @@ jobs:
           persist-credentials: false
       - run: docker compose config --quiet
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
-      - name: Build and load the cached image
+      - name: Build and load the cached runtime with native Codex
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         env:
           DOCKER_BUILD_RECORD_UPLOAD: 'false'
         with:
           context: .
+          build-args: RUNTIME_IMAGE=${{ matrix.image }}
           load: true
           tags: repo-maintainer:test
-          cache-from: type=gha,scope=maintainer-image
-          cache-to: ${{ github.ref == 'refs/heads/main' && 'type=gha,scope=maintainer-image,mode=max' || '' }}
+          cache-from: type=gha,scope=maintainer-image-${{ matrix.runtime }}
+          cache-to: ${{ github.ref == 'refs/heads/main' && format('type=gha,scope=maintainer-image-{0},mode=max', matrix.runtime) || '' }}
       - name: Validate YAML without an API key
         run: docker run --rm --volume "$PWD:/repository:ro" repo-maintainer:test check --config maintainer.example.yml
       - name: Check Rust tools as the container user
+        if: matrix.runtime == 'rust'
         run: |
           docker run --rm --entrypoint cargo repo-maintainer:test --version
           docker run --rm --entrypoint cargo repo-maintainer:test fmt --version
+      - name: Verify Codex's native binary
+        run: docker run --rm --entrypoint codex repo-maintainer:test --version
+      - name: Verify the default worker's private networking and TLS
+        if: matrix.runtime == 'generic'
+        run: python3 scripts/container-network-smoke.py
+      - name: Validate optional networking overlays
+        env:
+          MAINTAINER_PRIVATE_NETWORK: fixture-private-network
+          MAINTAINER_CA_BUNDLE: /tmp/fixture-ca-bundle.pem
+          MAINTAINER_DNS_SERVER: 10.0.0.53
+        run: docker compose -f compose.yml -f compose.private-network.yml -f compose.ca.yml -f compose.dns.yml config --quiet
+      - name: Verify a Node worker without Cargo
+        if: matrix.runtime == 'node'
+        run: |
+          docker run --rm --entrypoint sh repo-maintainer:test -c 'node --version && ! command -v cargo'
+          docker run --rm --volume "$PWD:/repository:ro" repo-maintainer:test check --config examples/node.yml
+      - name: Run a real Node project's configured checks without Cargo
+        if: matrix.runtime == 'node'
+        run: |
+          docker run --rm -i --entrypoint sh repo-maintainer:test <<'SH'
+          set -eu
+          project="$(mktemp -d)"
+          cd "$project"
+          printf '%s\n' '{"scripts":{"test":"node --test"}}' > package.json
+          printf '%s\n' 'const test = require("node:test"); const assert = require("node:assert/strict"); test("contract", () => assert.equal(1 + 1, 2));' > contract.test.js
+          printf '%s\n' '{"validation":{"profile":"custom","checks":[{"name":"tests","command":["npm","test"]}]}}' > .maintainer.yml
+          repo-maintainer validate --repo "$project"
+          SH
   workflows:
     name: Workflow syntax
     needs: changes

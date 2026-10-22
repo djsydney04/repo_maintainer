@@ -9,6 +9,9 @@ use std::{
 };
 
 pub fn credential(name: &str) -> bool {
+    if ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"].contains(&name.to_uppercase().as_str()) {
+        return true;
+    }
     ["KEY", "TOKEN", "SECRET", "PASSWORD"]
         .iter()
         .any(|s| name.to_uppercase().contains(s))
@@ -33,6 +36,22 @@ pub fn clean_environment_from(env: Environment) -> Environment {
                 "LANG",
                 "LC_ALL",
                 "SYSTEMROOT",
+                "HTTP_PROXY",
+                "HTTPS_PROXY",
+                "ALL_PROXY",
+                "NO_PROXY",
+                "http_proxy",
+                "https_proxy",
+                "all_proxy",
+                "no_proxy",
+                "SSL_CERT_FILE",
+                "SSL_CERT_DIR",
+                "CURL_CA_BUNDLE",
+                "REQUESTS_CA_BUNDLE",
+                "NODE_EXTRA_CA_CERTS",
+                "GIT_SSL_CAINFO",
+                "PIP_CERT",
+                "NPM_CONFIG_CAFILE",
             ]
             .contains(&k.as_str())
         })

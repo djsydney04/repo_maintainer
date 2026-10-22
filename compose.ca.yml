@@ -1,0 +1,17 @@
+services:
+  maintainer:
+    environment:
+      SSL_CERT_FILE: /etc/maintainer/ca-bundle.pem
+      CURL_CA_BUNDLE: /etc/maintainer/ca-bundle.pem
+      REQUESTS_CA_BUNDLE: /etc/maintainer/ca-bundle.pem
+      NODE_EXTRA_CA_CERTS: /etc/maintainer/ca-bundle.pem
+      GIT_SSL_CAINFO: /etc/maintainer/ca-bundle.pem
+      PIP_CERT: /etc/maintainer/ca-bundle.pem
+      NPM_CONFIG_CAFILE: /etc/maintainer/ca-bundle.pem
+    volumes:
+      - type: bind
+        source: ${MAINTAINER_CA_BUNDLE:?Set an absolute path to your CA bundle}
+        target: /etc/maintainer/ca-bundle.pem
+        read_only: true
+        bind:
+          create_host_path: false

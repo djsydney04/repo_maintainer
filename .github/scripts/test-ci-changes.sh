@@ -8,8 +8,8 @@ cd "$fixture"
 git init --quiet
 git config user.email ci@example.invalid
 git config user.name 'CI fixture'
-mkdir -p docs src tests examples .github/workflows .github/scripts
-for path in README.md docs/banner.png src/main.rs src/template.md Cargo.lock tests/config.rs examples/rust-sdks.json maintainer.example.yml Dockerfile compose.yml .github/workflows/ci.yml .github/workflows/maintain.yml .github/scripts/ci-changes.sh; do
+mkdir -p docs src tests examples scripts .github/workflows .github/scripts
+for path in README.md docs/banner.png src/main.rs src/template.md Cargo.lock tests/config.rs examples/rust-sdks.json maintainer.example.yml Dockerfile compose.yml compose.private-network.yml compose.ca.yml compose.dns.yml scripts/install-codex.sh scripts/container-network-smoke.py examples/node.yml .github/workflows/ci.yml .github/workflows/maintain.yml .github/scripts/ci-changes.sh; do
   printf 'fixture\n' > "$path"
 done
 git add .
@@ -36,7 +36,7 @@ expect 'manual run' "$all" ''
 expect 'missing base' "$all" 0000000000000000000000000000000000000000
 expect 'invalid base' "$all" --invalid
 
-for path in README.md docs/banner.png src/main.rs src/template.md Cargo.lock tests/config.rs examples/rust-sdks.json maintainer.example.yml Dockerfile compose.yml .github/workflows/ci.yml .github/workflows/maintain.yml .github/scripts/ci-changes.sh unknown-input.txt; do
+for path in README.md docs/banner.png src/main.rs src/template.md Cargo.lock tests/config.rs examples/rust-sdks.json maintainer.example.yml Dockerfile compose.yml compose.private-network.yml compose.ca.yml compose.dns.yml scripts/install-codex.sh scripts/container-network-smoke.py examples/node.yml .github/workflows/ci.yml .github/workflows/maintain.yml .github/scripts/ci-changes.sh unknown-input.txt; do
   git reset --hard --quiet "$base_commit"
   git clean -fdq
   printf 'changed\n' > "$path"
@@ -44,8 +44,9 @@ for path in README.md docs/banner.png src/main.rs src/template.md Cargo.lock tes
   git commit --quiet -m 'Change fixture'
   case "$path" in
     README.md|docs/*) expected="$none" ;;
+    examples/node.yml) expected="$docker_only" ;;
     tests/*|examples/*) expected="$rust_only" ;;
-    Dockerfile|compose.yml) expected="$docker_only" ;;
+    Dockerfile|compose*.yml|scripts/*) expected="$docker_only" ;;
     .github/workflows/ci.yml|.github/scripts/*) expected="$all" ;;
     .github/workflows/maintain.yml) expected=$'rust=false\ndocker=false\nworkflows=true' ;;
     *) expected="$builds" ;;

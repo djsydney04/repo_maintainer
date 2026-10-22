@@ -24,9 +24,11 @@ else
         workflows=true ;;
       Cargo.toml|Cargo.lock|src/*|maintainer.example.yml)
         rust=true; docker=true ;;
+      examples/node.yml)
+        docker=true ;;
       tests/*|examples/*|rustfmt.toml|rust-toolchain|rust-toolchain.toml|.cargo/*)
         rust=true ;;
-      Dockerfile|.dockerignore|compose.yml|compose.yaml|maintainer|.env.example)
+      Dockerfile|.dockerignore|compose*.yml|compose*.yaml|scripts/*|maintainer|.env.example)
         docker=true ;;
       *.md|docs/*|LICENSE|.github/ISSUE_TEMPLATE/*|.github/dependabot.yml)
         ;;

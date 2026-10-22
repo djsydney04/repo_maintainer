@@ -9,11 +9,11 @@ For cloud failures, open the linked Actions run and its retained proposal.
 | Symptom | What to check |
 | --- | --- |
 | `docker` or Compose is missing | Install/start Docker with the Compose plugin on the computer running local jobs. Cloud runs do not need local Docker. |
-| Native command or Rust checks are missing | Install the maintainer with `cargo install --locked --path .` using Rust 1.89 or newer. Add Cargo's binary directory to `PATH`; install Git, rustfmt and Clippy. |
+| Native command or Rust checks are missing | Install the maintainer with `cargo install --locked --path .` using Rust 1.89 or newer. Add Cargo's binary directory to `PATH`; install Git and the selected project/agent tools. |
 | Configuration not found | Run from the target repository, use `maintainer init`, or pass the correct `--config` path. Cloud `config_path` is relative to the consuming repo. |
 | Unknown or duplicate YAML field | Compare with the [field reference](configuration.md). Settings are validated; misspelled keys are not ignored. |
-| Selected key missing or rejected | Check the provider-specific environment variable/Actions secret. A generic `SDK_MAINTENANCE_API_KEY` overrides named keys. |
-| OpenAI/Anthropic rejects the configuration | Set `agent.allow_paid: true` explicitly, select an available model and supply that provider's key. |
+| Selected key missing or rejected | Check the provider-specific environment variable/Actions secret. `MAINTENANCE_API_KEY` (or its legacy SDK alias) overrides builtin provider keys; Codex uses its own auth or `CODEX_API_KEY`. |
+| Codex/OpenAI/Anthropic rejects the configuration | Set `agent.allow_paid: true` explicitly, select an available model and supply that provider's key. |
 | Model is unsupported or inaccessible | Groq/Google models must be allowed by the bundled provider profile. For every provider, confirm the selected model is available to your account. |
 | HTTP 429 / quota exhausted | Inspect provider account limits and wait for the relevant reset. Another key in the same quota pool does not add capacity. |
 | Context or request budget exceeded | Narrow the maintenance task or sources. Groq's free token budget needs smaller work; partial proposals are retained. |
@@ -27,6 +27,11 @@ For cloud failures, open the linked Actions run and its retained proposal.
 | PR creation or CI dispatch fails | Check the caller permissions, Actions' PR-creation setting, and that `ci_workflow` supports manual dispatch. |
 | Checks failed after editing | Review the logs and retained patch. A failed or incomplete proposal does not reach publishing. |
 | No notification arrives | Enable GitHub assignment/mention notifications. Successful no-ops and identical blockers are intentionally quiet. |
+| Codex executable is missing | Install the native CLI on the worker, use `install_codex: true` in the workflow, or enable it in the Docker build. |
+| A non-Rust repository is trying to run Cargo | Set `validation.profile: custom` and provide project checks. Omitting validation retains the Rust profile for older configurations. |
+| A project command is missing | Install its runtime on every worker or choose a suitable Docker base image. Custom checks execute the configured argv directly. |
+| Publication lacks a validation receipt | Apply the patch in a fresh checkout, run `validate` and transfer `validation.json` with the proposal. Editing patch/config afterwards invalidates it. |
+| Self-hosted jobs stay queued | Check that a live worker matches every label in `runner_labels` and can access the consuming repository. |
 
 ## Sharing a useful report
 

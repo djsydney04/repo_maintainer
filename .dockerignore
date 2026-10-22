@@ -5,3 +5,5 @@
 !maintainer.example.yml
 !src/
 !src/**
+!scripts/
+!scripts/install-codex.sh

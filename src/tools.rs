@@ -39,7 +39,7 @@ pub fn definitions(config: &Config) -> Vec<Definition> {
     if !config.rust.crates.is_empty() {
         check["crate"] = json!({"type":"string","enum":config.rust.crates});
     }
-    vec![
+    let mut definitions = vec![
         definition(
             "read",
             "Read a UTF-8 source file with one-based line offset and bounded line limit.",
@@ -88,7 +88,14 @@ pub fn definitions(config: &Config) -> Vec<Definition> {
             json!({"url":{"type":"string"},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":200,"maximum":4000}}),
             &["url"],
         ),
-    ]
+    ];
+    if config.validation.profile != "rust" {
+        definitions.retain(|d| d.name != "check_rust");
+    }
+    if !config.validation.checks.is_empty() {
+        definitions.push(definition("check", "Run one operator-configured repository check by name; inspect failures and repair them.", json!({"name":{"type":"string","enum":config.validation.checks.iter().map(|c| &c.name).collect::<Vec<_>>()}}), &["name"]));
+    }
+    definitions
 }
 pub fn check_command(config: &Config, args: &Value) -> Result<Vec<String>> {
     #[derive(Deserialize)]
@@ -182,6 +189,24 @@ impl Tools<'_> {
             16_000
         };
         let remaining = self.deadline.saturating_duration_since(Instant::now());
+        if name == "check" {
+            let check = self
+                .config
+                .validation
+                .checks
+                .iter()
+                .find(|c| args["name"] == c.name)
+                .context("Unknown configured check")?;
+            let result = crate::validation::execute(self.config, check, self.root, remaining)?;
+            self.checks
+                .push(json!({"check":check.name,"passed":result.code==0}));
+            return Ok(format!(
+                "Check: {}\nExit code: {}\n{}",
+                check.name,
+                result.code,
+                tail(&result.text(), max)
+            ));
+        }
         if name == "check_rust" {
             let command = check_command(self.config, args)?;
             let refs: Vec<_> = command.iter().map(String::as_str).collect();
