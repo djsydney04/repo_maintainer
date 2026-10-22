@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Setup and configuration
+    url: https://github.com/djsydney04/repo_maintainer#readme
+    about: Start with the setup guide and provider settings in the README.
   - name: Security vulnerability
     url: https://github.com/djsydney04/repo_maintainer/security/advisories/new
     about: Report vulnerabilities privately; do not include secrets in public issues.

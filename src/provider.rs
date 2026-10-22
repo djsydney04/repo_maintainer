@@ -268,7 +268,7 @@ fn send_to(
     timeout: Duration,
     endpoint: &str,
 ) -> Result<Value> {
-    let client = Client::builder()
+    let client = crate::network::trust(Client::builder())?
         .timeout(timeout)
         .redirect(reqwest::redirect::Policy::none())
         .build()?;

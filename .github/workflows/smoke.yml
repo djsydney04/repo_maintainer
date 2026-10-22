@@ -14,6 +14,15 @@ on:
       allow_paid:
         type: boolean
         default: false
+      agent_runner:
+        type: string
+        default: ''
+      runner_labels:
+        type: string
+        default: '["ubuntu-latest"]'
+      install_codex:
+        type: boolean
+        default: false
     secrets:
       GEMINI_API_KEY:
         required: false
@@ -25,11 +34,15 @@ on:
         required: false
       SDK_MAINTENANCE_API_KEY:
         required: false
+      MAINTENANCE_API_KEY:
+        required: false
+      CODEX_API_KEY:
+        required: false
 permissions:
   contents: read
 jobs:
   repair:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -41,14 +54,22 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal --component rustfmt --component clippy
           cargo +stable build --release --locked
+      - name: Install Codex when requested
+        if: inputs.agent_runner == 'codex' && inputs.install_codex
+        run: |
+          bash scripts/install-codex.sh "$RUNNER_TEMP/maintainer-tools/bin"
+          echo "$RUNNER_TEMP/maintainer-tools/bin" >> "$GITHUB_PATH"
       - name: Verify real inference, editing and offline Rust repair
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           SDK_MAINTENANCE_API_KEY: ${{ secrets.SDK_MAINTENANCE_API_KEY }}
+          MAINTENANCE_API_KEY: ${{ secrets.MAINTENANCE_API_KEY }}
+          CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MAINTENANCE_PROVIDER: ${{ inputs.provider }}
+          MAINTENANCE_RUNNER: ${{ inputs.agent_runner }}
           MAINTENANCE_MODEL: ${{ inputs.model }}
           MAINTENANCE_ALLOW_PAID: ${{ inputs.allow_paid && 'true' || '' }}
         run: target/release/repo-maintainer smoke --artifacts "$RUNNER_TEMP/smoke"

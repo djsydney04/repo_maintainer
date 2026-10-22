@@ -1,0 +1,22 @@
+version: 2
+name: Go repository maintenance
+agent:
+  runner: codex
+  allow_paid: true
+instructions: |
+  Find a small maintenance improvement to this Go repository. Preserve public
+  APIs, cover behavior changes with tests, and pass the configured checks.
+editable:
+  root_files: [README.md, CHANGELOG.md]
+  source_dirs: [cmd, internal, pkg, tests, docs]
+  extensions: [.go, .md, .json]
+validation:
+  profile: custom
+  setup:
+    - name: dependencies
+      command: [go, mod, download]
+  checks:
+    - name: tests
+      command: [go, test, ./...]
+    - name: vet
+      command: [go, vet, ./...]

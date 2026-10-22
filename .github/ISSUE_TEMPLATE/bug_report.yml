@@ -1,22 +1,45 @@
 name: Bug report
-description: Report a reproducible problem with the maintainer
+description: Report a reproducible problem with configuration, execution or PR creation.
+title: 'fix: '
+labels: [bug, triage]
 body:
-  - type: textarea
-    id: problem
+  - type: markdown
     attributes:
-      label: What happened?
-      description: Include expected behavior and a minimal reproduction. Remove all credentials.
+      value: Before sharing logs or YAML, remove API keys, tokens and private repository content.
+  - type: input
+    id: version
+    attributes:
+      label: Maintainer commit
+      description: The pinned commit SHA or local checkout revision.
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Execution mode
+      options: [GitHub Actions, Local Docker, Native executable, Local development]
+    validations:
+      required: true
+  - type: input
+    id: provider
+    attributes:
+      label: Runner, provider and model
+      placeholder: codex / CLI default, or builtin / groq / openai/gpt-oss-120b
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
     validations:
       required: true
   - type: textarea
-    id: environment
+    id: reproduce
     attributes:
-      label: Environment
-      description: Commit or version, OS, Rust or Docker version, provider and redacted configuration.
+      label: Steps to reproduce
+      description: Include the smallest relevant configuration, without secrets.
     validations:
       required: true
   - type: textarea
     id: logs
     attributes:
-      label: Redacted diagnostics
-      render: text
+      label: Sanitized logs or public run link
+      description: Include the failing stage and error if available.

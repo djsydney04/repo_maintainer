@@ -1,10 +1,24 @@
 name: Feature request
-description: Suggest an improvement or discuss a contribution
+description: Suggest a concrete improvement to the maintainer.
+title: 'feat: '
+labels: [enhancement, triage]
 body:
   - type: textarea
-    id: request
+    id: problem
     attributes:
-      label: Problem and proposed behavior
-      description: Describe the use case, desired result and alternatives considered.
+      label: What problem would this solve?
+      description: Describe your workflow and where it is currently difficult.
     validations:
       required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Show an example or configuration if helpful.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or constraints
+      description: Include provider, runtime, compatibility or quota constraints.

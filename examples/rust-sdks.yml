@@ -1,0 +1,30 @@
+version: 1
+name: Prism SDK maintenance
+agent:
+  runner: builtin
+  provider: groq
+  max_requests: 16
+sources:
+  - https://developers.openai.com/api/docs/changelog
+  - https://ai.google.dev/gemini-api/docs/changelog
+  - https://console.groq.com/docs/changelog
+official_hosts:
+  - developers.openai.com
+  - platform.openai.com
+  - ai.google.dev
+  - console.groq.com
+instructions: |
+  Maintain Prism's independent Rust SDKs for OpenAI, Gemini and Groq against
+  official references. Implement a small, compatible fix only when documentation
+  establishes a concrete gap or bug. Add offline contract tests and update
+  examples as needed. Leave the source unchanged when no maintenance is needed.
+editable:
+  root_files: [README.md]
+  markdown_dirs: [docs]
+  source_dirs: [crates/core, crates/openai, crates/gemini, crates/groq]
+  extensions: [.rs, .md, .json]
+validation:
+  profile: rust
+rust:
+  msrv: 1.88.0
+  crates: [prism-ai-core, prism-openai, prism-gemini, prism-groq]

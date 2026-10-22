@@ -1,9 +1,14 @@
 name: Maintainer checks
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: maintainer-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   rust:
     name: Rust (${{ matrix.os }}, ${{ matrix.toolchain }})
@@ -27,19 +32,60 @@ jobs:
         run: |
           cargo +"$TOOLCHAIN" fmt --all --check
           cargo +"$TOOLCHAIN" clippy --locked --all-targets -- -D warnings
-          cargo +"$TOOLCHAIN" test --locked
+          env -u GITHUB_OUTPUT cargo +"$TOOLCHAIN" test --locked
           cargo +"$TOOLCHAIN" run --locked -- check --config maintainer.example.yml
   docker:
+    name: Docker (${{ matrix.runtime }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [generic, rust, node]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
       - run: docker compose config --quiet
-      - run: docker build --tag repo-maintainer:test .
+      - name: Build the selected runtime with native Codex
+        env:
+          RUNTIME: ${{ matrix.runtime }}
+        run: |
+          runtime_image=debian:bookworm-slim
+          if [ "$RUNTIME" = rust ]; then runtime_image=rust:1.89-slim-bookworm; fi
+          if [ "$RUNTIME" = node ]; then runtime_image=node:24-bookworm; fi
+          docker build --build-arg "RUNTIME_IMAGE=$runtime_image" --tag repo-maintainer:test .
       - name: Validate YAML without an API key
         run: docker run --rm --volume "$PWD:/repository:ro" repo-maintainer:test check --config maintainer.example.yml
       - name: Check Rust tools as the container user
+        if: matrix.runtime == 'rust'
         run: |
           docker run --rm --entrypoint cargo repo-maintainer:test --version
           docker run --rm --entrypoint cargo repo-maintainer:test fmt --version
+      - name: Verify Codex's native binary
+        run: docker run --rm --entrypoint codex repo-maintainer:test --version
+      - name: Verify the default worker's private networking and TLS
+        if: matrix.runtime == 'generic'
+        run: python3 scripts/container-network-smoke.py
+      - name: Validate optional networking overlays
+        env:
+          MAINTAINER_PRIVATE_NETWORK: fixture-private-network
+          MAINTAINER_CA_BUNDLE: /tmp/fixture-ca-bundle.pem
+          MAINTAINER_DNS_SERVER: 10.0.0.53
+        run: docker compose -f compose.yml -f compose.private-network.yml -f compose.ca.yml -f compose.dns.yml config --quiet
+      - name: Verify a Node worker without Cargo
+        if: matrix.runtime == 'node'
+        run: |
+          docker run --rm --entrypoint sh repo-maintainer:test -c 'node --version && ! command -v cargo'
+          docker run --rm --volume "$PWD:/repository:ro" repo-maintainer:test check --config examples/node.yml
+      - name: Run a real Node project's configured checks without Cargo
+        if: matrix.runtime == 'node'
+        run: |
+          docker run --rm -i --entrypoint sh repo-maintainer:test <<'SH'
+          set -eu
+          project="$(mktemp -d)"
+          cd "$project"
+          printf '%s\n' '{"scripts":{"test":"node --test"}}' > package.json
+          printf '%s\n' 'const test = require("node:test"); const assert = require("node:assert/strict"); test("contract", () => assert.equal(1 + 1, 2));' > contract.test.js
+          printf '%s\n' '{"validation":{"profile":"custom","checks":[{"name":"tests","command":["npm","test"]}]}}' > .maintainer.yml
+          repo-maintainer validate --repo "$project"
+          SH
