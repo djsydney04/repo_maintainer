@@ -18,6 +18,33 @@ use std::{
 };
 
 pub const MAX_PATCH: usize = 500_000;
+fn sha256_hex(bytes: impl AsRef<[u8]>) -> String {
+    use std::fmt::Write;
+
+    let mut hex = String::with_capacity(64);
+    for byte in Sha256::digest(bytes) {
+        write!(&mut hex, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    hex
+}
+
+#[cfg(test)]
+mod digest_tests {
+    use super::sha256_hex;
+
+    #[test]
+    fn sha256_preserves_persisted_lowercase_hex_with_leading_zeroes() {
+        assert_eq!(
+            sha256_hex(b""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        assert_eq!(
+            sha256_hex(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+}
+
 pub fn write_json(path: &Path, value: &impl Serialize) -> Result<()> {
     fs::write(path, format!("{}\n", serde_json::to_string_pretty(value)?))?;
     Ok(())
@@ -451,8 +478,8 @@ pub fn validate(config: &Config, source: &Path, artifacts: &Path) -> Result<()> 
     write_json(
         &artifacts.join("validation.json"),
         &json!({
-            "sha":request["sha"], "patch_sha256":format!("{:x}", Sha256::digest(&before)),
-            "config_sha256":format!("{:x}", Sha256::digest(serde_json::to_vec(config)?)), "checks":checks
+            "sha":request["sha"], "patch_sha256":sha256_hex(&before),
+            "config_sha256":sha256_hex(serde_json::to_vec(config)?), "checks":checks
         }),
     )
 }
@@ -470,13 +497,8 @@ pub fn publish(config: &Config, source: &Path, artifacts: &Path) -> Result<()> {
     let request = read_json(&artifacts.join("request.json"))?;
     ensure!(
         receipt["sha"] == request["sha"]
-            && receipt["patch_sha256"]
-                == format!(
-                    "{:x}",
-                    Sha256::digest(fs::read(artifacts.join("proposal.patch"))?)
-                )
-            && receipt["config_sha256"]
-                == format!("{:x}", Sha256::digest(serde_json::to_vec(config)?)),
+            && receipt["patch_sha256"] == sha256_hex(fs::read(artifacts.join("proposal.patch"))?)
+            && receipt["config_sha256"] == sha256_hex(serde_json::to_vec(config)?),
         "Validation receipt does not match this proposal and configuration"
     );
     let checks = receipt["checks"]
@@ -674,10 +696,7 @@ pub fn notify(config: &Config, artifacts: &Path) -> Result<()> {
         }
         return Ok(());
     };
-    let marker = format!(
-        "<!-- repo-maintainer:{:x} -->",
-        Sha256::digest(reason.as_bytes())
-    );
+    let marker = format!("<!-- repo-maintainer:{} -->", sha256_hex(reason.as_bytes()));
     if issues
         .iter()
         .any(|v| v["body"].as_str().unwrap_or("").contains(&marker))
