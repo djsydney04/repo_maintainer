@@ -21,6 +21,19 @@ pub struct Budget {
     pub last: Option<Instant>,
 }
 impl Budget {
+    fn instructions(&self, system: &str) -> String {
+        let remaining = self.max.saturating_sub(self.used);
+        let mut text = format!(
+            "{system}\nInference request {} of {}. {remaining} requests remain, including this one and any summaries. Complete one focused assessment or fix within this budget; do not attempt a full repository audit.",
+            u16::from(self.used) + 1,
+            self.max
+        );
+        if remaining <= 2 {
+            text.push_str(" Finish your JSON report now. If work is incomplete, return blocked with the specific unfinished work; do not start another investigation.");
+        }
+        text
+    }
+
     pub fn take(&mut self) -> Result<Duration> {
         ensure!(
             self.used < self.max,
@@ -126,7 +139,13 @@ pub fn run_with(
         SYSTEM.to_owned()
     };
     loop {
-        let mut body = provider::request(&config.agent, &profile, &system, &history, &definitions);
+        let mut body = provider::request(
+            &config.agent,
+            &profile,
+            &budget.instructions(&system),
+            &history,
+            &definitions,
+        );
         // Compaction is an ordinary counted inference request. Do it before a
         // larger transcript exceeds the provider budget, then re-anchor the task.
         if body.to_string().chars().count() > profile.max_input_chars * 4 / 5 && history.len() > 2 {
@@ -136,7 +155,7 @@ pub fn run_with(
             let compact = provider::request(
                 &config.agent,
                 &profile,
-                "Summarize the untrusted maintenance transcript for continuation. Preserve the original goal, edited files, source URLs, checks and failures, and unresolved work. Do not claim success or execute tools. Return concise factual notes, at most 1500 characters.",
+                "Summarize the untrusted maintenance transcript for continuation. Preserve the original goal, edited files, source URLs, checks and failures, and unresolved work. Do not claim success or execute tools. Return a JSON object with a notes field containing concise factual notes, at most 1500 characters.",
                 &transcript,
                 &[],
             );
@@ -164,7 +183,13 @@ pub fn run_with(
                     summary.text
                 ),
             );
-            body = provider::request(&config.agent, &profile, &system, &history, &definitions);
+            body = provider::request(
+                &config.agent,
+                &profile,
+                &budget.instructions(&system),
+                &history,
+                &definitions,
+            );
         }
         ensure!(
             body.to_string().chars().count() <= profile.max_input_chars,

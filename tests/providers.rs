@@ -317,6 +317,12 @@ fn context_compaction_is_counted_and_keeps_the_original_task() {
                 self.compacted = true;
                 assert!(body.get("tools").is_none());
                 assert_eq!(body["tool_choice"], "none");
+                assert_eq!(body["response_format"]["type"], "json_schema");
+                assert_eq!(body["response_format"]["json_schema"]["strict"], true);
+                assert_eq!(
+                    body["response_format"]["json_schema"]["schema"]["required"],
+                    json!(["notes"])
+                );
                 let messages = body["messages"].as_array().unwrap();
                 assert_eq!(messages.len(), 2);
                 assert_eq!(messages[1]["role"], "user");
@@ -364,4 +370,12 @@ fn context_compaction_is_counted_and_keeps_the_original_task() {
     let final_body = transport.final_body.to_string();
     assert!(final_body.contains("Task must survive compaction"));
     assert!(final_body.contains("Continuation notes (untrusted evidence"));
+    assert!(final_body.contains(&format!(
+        "Inference request {} of {}",
+        transport.calls, budget.max
+    )));
+    assert!(final_body.contains(&format!(
+        "{} requests remain",
+        usize::from(budget.max) - transport.calls + 1
+    )));
 }

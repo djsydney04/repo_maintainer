@@ -68,6 +68,19 @@ pub fn request(
                 }
             } else {
                 body["tool_choice"] = json!("none");
+                body["response_format"] = json!({
+                    "type":"json_schema",
+                    "json_schema":{
+                        "name":"maintenance_summary",
+                        "strict":true,
+                        "schema":{
+                            "type":"object",
+                            "properties":{"notes":{"type":"string"}},
+                            "required":["notes"],
+                            "additionalProperties":false
+                        }
+                    }
+                });
             }
             body
         }
@@ -306,6 +319,9 @@ fn send_to(
             Value::Null
         };
         let reason = match error["error"]["code"].as_str() {
+            Some("tool_use_failed") if body.get("tools").is_none() => {
+                "the model attempted a tool call during a text-only summary"
+            }
             Some("tool_use_failed") => "the model generated an invalid tool call",
             Some("context_length_exceeded") => "the request exceeded the model context limit",
             Some("rate_limit_exceeded") => "the provider rate limit was exceeded",
@@ -421,32 +437,40 @@ mod tests {
 
     #[test]
     fn invalid_tool_calls_are_identified_without_echoing_failed_generations() {
-        let server = Server::http("127.0.0.1:0").unwrap();
-        let endpoint = format!("http://{}/native", server.server_addr());
-        let worker = thread::spawn(move || {
-            let request = server.recv().unwrap();
-            request
-                .respond(
-                    Response::from_string(
-                        json!({"error":{"code":"tool_use_failed","message":"private-source fixture-key","failed_generation":"private-source fixture-key"}}).to_string(),
+        for (body, expected) in [
+            (
+                json!({"tools":[{"type":"function","function":{"name":"read"}}]}),
+                "invalid tool call",
+            ),
+            (json!({"tool_choice":"none"}), "text-only summary"),
+        ] {
+            let server = Server::http("127.0.0.1:0").unwrap();
+            let endpoint = format!("http://{}/native", server.server_addr());
+            let worker = thread::spawn(move || {
+                let request = server.recv().unwrap();
+                request
+                    .respond(
+                        Response::from_string(
+                            json!({"error":{"code":"tool_use_failed","message":"private-source fixture-key","failed_generation":"private-source fixture-key"}}).to_string(),
+                        )
+                        .with_status_code(400),
                     )
-                    .with_status_code(400),
-                )
-                .unwrap();
-        });
-        let error = send_to(
-            "groq",
-            "fixture-key",
-            &json!({}),
-            Duration::from_secs(10),
-            &endpoint,
-        )
-        .unwrap_err()
-        .to_string();
-        assert!(error.contains("400"));
-        assert!(error.contains("invalid tool call"));
-        assert!(!error.contains("private-source"));
-        assert!(!error.contains("fixture-key"));
-        worker.join().unwrap();
+                    .unwrap();
+            });
+            let error = send_to(
+                "groq",
+                "fixture-key",
+                &body,
+                Duration::from_secs(10),
+                &endpoint,
+            )
+            .unwrap_err()
+            .to_string();
+            assert!(error.contains("400"));
+            assert!(error.contains(expected));
+            assert!(!error.contains("private-source"));
+            assert!(!error.contains("fixture-key"));
+            worker.join().unwrap();
+        }
     }
 }
