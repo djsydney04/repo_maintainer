@@ -80,7 +80,7 @@ jobs:
       package_check: ${{ steps.prepare.outputs.package_check }}
       validation_profile: ${{ steps.prepare.outputs.validation_profile }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: djsydney04/repo_maintainer
           ref: ${{ inputs.maintainer_ref }}
@@ -90,7 +90,7 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal
           cargo +stable build --release --locked --manifest-path automation/Cargo.toml
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: consumer
           persist-credentials: false
@@ -102,7 +102,7 @@ jobs:
           automation/target/release/repo-maintainer prepare
           --artifacts "$RUNNER_TEMP/proposal"
 
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         id: source
         with:
           ref: ${{ steps.prepare.outputs.sha }}
@@ -163,7 +163,7 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runner_labels) }}
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: djsydney04/repo_maintainer
           ref: ${{ inputs.maintainer_ref }}
@@ -173,11 +173,11 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal
           cargo +stable build --release --locked --manifest-path automation/Cargo.toml
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: consumer
           persist-credentials: false
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.propose.outputs.sha }}
           path: source
@@ -214,7 +214,7 @@ jobs:
       issues: write
       actions: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: djsydney04/repo_maintainer
           ref: ${{ inputs.maintainer_ref }}
@@ -224,11 +224,11 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal
           cargo +stable build --release --locked --manifest-path automation/Cargo.toml
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: consumer
           persist-credentials: false
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.propose.outputs.sha }}
           path: source
@@ -254,7 +254,7 @@ jobs:
       contents: read
       issues: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: djsydney04/repo_maintainer
           ref: ${{ inputs.maintainer_ref }}
@@ -264,7 +264,7 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal
           cargo +stable build --release --locked --manifest-path automation/Cargo.toml
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: consumer
           persist-credentials: false
