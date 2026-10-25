@@ -24,12 +24,12 @@ impl Budget {
     fn instructions(&self, system: &str) -> String {
         let remaining = self.max.saturating_sub(self.used);
         let mut text = format!(
-            "{system}\nInference request {} of {}. {remaining} requests remain, including this one and any summaries. Complete one focused assessment or fix within this budget; do not attempt a full repository audit.",
+            "{system}\nInference request {} of {}. {remaining} requests remain, including this one and any summaries. Plan the configured task within this budget and leave room for its final response.",
             u16::from(self.used) + 1,
             self.max
         );
         if remaining <= 2 {
-            text.push_str(" Finish your JSON report now. If work is incomplete, return blocked with the specific unfinished work; do not start another investigation.");
+            text.push_str(" Finish the requested report now. If work is incomplete, return blocked with the specific unfinished work; do not start another investigation.");
         }
         text
     }
