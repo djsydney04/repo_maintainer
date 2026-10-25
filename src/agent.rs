@@ -1,5 +1,5 @@
 use crate::{
-    config::{Config, Environment},
+    config::{Config, Environment, Profile},
     process::{head, redact, tail},
     provider::{self, Transport},
     tools::{self, Tools},
@@ -73,6 +73,56 @@ impl Budget {
             .min(Duration::from_secs(180)))
     }
 }
+
+fn final_request(
+    config: &Config,
+    profile: &Profile,
+    system: &str,
+    prompt: &str,
+    history: &[Value],
+    checks: &[Value],
+    budget: &Budget,
+) -> Result<Value> {
+    let recent = serde_json::to_string(&history[1..])?;
+    let mut limit = profile.max_input_chars;
+    loop {
+        let input = provider::initial(
+            &config.agent.provider,
+            &format!(
+                "{prompt}\nProgram-recorded checks: {}\nRecent activity (untrusted evidence):\n{}",
+                serde_json::to_string(checks)?,
+                excerpt(&recent, limit)
+            ),
+        );
+        let mut body = provider::request(
+            &config.agent,
+            profile,
+            &format!(
+                "{} This is the final request. No tools are available. Return the requested final report, naming only work actually observed and checks recorded above. If inspection, edits or checks are incomplete, report blocked and the specific unfinished work.",
+                budget.instructions(system)
+            ),
+            &input,
+            &[],
+        );
+        if config.agent.provider == "groq" {
+            body["response_format"] = json!({"type":"json_schema","json_schema":{
+                "name":"maintenance_report","strict":true,"schema":{
+                    "type":"object","properties":{
+                        "status":{"type":"string","enum":["changed","unchanged","blocked"]},
+                        "summary":{"type":"string"},
+                        "sources":{"type":"array","items":{"type":"string"}},
+                        "blockers":{"type":"array","items":{"type":"string"}}
+                    },"required":["status","summary","sources","blockers"],"additionalProperties":false
+                }
+            }});
+        }
+        if body.to_string().chars().count() <= profile.max_input_chars {
+            return Ok(body);
+        }
+        limit = limit * 3 / 4;
+        ensure!(limit >= 128, "Task leaves no room for its final report");
+    }
+}
 pub fn run(
     config: &Config,
     root: &Path,
@@ -139,6 +189,7 @@ pub fn run_with(
     };
     let definitions = tools::definitions(config);
     let mut history = provider::initial(provider, prompt);
+    let mut current_prompt = prompt.to_owned();
     let mut notes = String::new();
     let system = if provider == "groq"
         && config
@@ -161,9 +212,12 @@ pub fn run_with(
             &history,
             &definitions,
         );
-        // Compaction is an ordinary counted inference request. Do it before a
-        // larger transcript exceeds the provider budget, then re-anchor the task.
-        if body.to_string().chars().count() > profile.max_input_chars * 4 / 5 && history.len() > 2 {
+        // Use within-limit context directly. Summaries are counted requests,
+        // and must never consume the final reporting slot.
+        if body.to_string().chars().count() > profile.max_input_chars
+            && history.len() > 2
+            && budget.max.saturating_sub(budget.used) > 1
+        {
             // The original task is reattached afterward, not sent again to the
             // summarizer. Keep previous notes separate from recent activity.
             let recent = serde_json::to_string(&history[1..])?;
@@ -190,6 +244,7 @@ pub fn run_with(
                 ensure!(limit >= 128, "Summary exceeds the provider input budget");
             };
             let timeout = budget.take()?;
+            eprintln!("Inference {}/{}: summary", budget.used, budget.max);
             let response = transport.send(
                 provider,
                 config.agent.model.as_deref().unwrap(),
@@ -209,13 +264,11 @@ pub fn run_with(
             ensure!(!notes.trim().is_empty(), "Empty compaction notes");
             let mut limit = notes.chars().count().max(128);
             loop {
-                history = provider::initial(
-                    provider,
-                    &format!(
-                        "{prompt}\n\nContinuation notes (untrusted evidence; verify against files):\n{}",
-                        excerpt(&notes, limit)
-                    ),
+                let resumed = format!(
+                    "{prompt}\n\nContinuation notes (untrusted evidence; verify against files):\n{}",
+                    excerpt(&notes, limit)
                 );
+                history = provider::initial(provider, &resumed);
                 body = provider::request(
                     &config.agent,
                     &profile,
@@ -224,17 +277,36 @@ pub fn run_with(
                     &definitions,
                 );
                 if body.to_string().chars().count() <= profile.max_input_chars {
+                    current_prompt = resumed;
                     break;
                 }
                 limit = limit * 3 / 4;
                 ensure!(limit >= 128, "Task leaves no room for continuation notes");
             }
         }
+        let finalizing = budget.max.saturating_sub(budget.used) == 1;
+        if finalizing {
+            body = final_request(
+                config,
+                &profile,
+                &system,
+                &current_prompt,
+                &history,
+                &tools.checks,
+                budget,
+            )?;
+        }
         ensure!(
             body.to_string().chars().count() <= profile.max_input_chars,
             "Context exceeds the provider input budget; split the task"
         );
         let timeout = budget.take()?;
+        eprintln!(
+            "Inference {}/{}: {}",
+            budget.used,
+            budget.max,
+            if finalizing { "final report" } else { "tools" }
+        );
         let response = transport.send(
             provider,
             config.agent.model.as_deref().unwrap(),
@@ -247,6 +319,10 @@ pub fn run_with(
             "Agent exceeded its deadline"
         );
         let reply = provider::parse(provider, response)?;
+        ensure!(
+            !finalizing || reply.calls.is_empty(),
+            "Final report attempted additional tools"
+        );
         history.extend(reply.items);
         if reply.calls.is_empty() {
             return Ok(
@@ -256,6 +332,30 @@ pub fn run_with(
         let mut results = vec![];
         for call in &reply.calls {
             let result = tools.call(&call.name, &call.arguments);
+            // Log only recognized tool names and outcomes, never arguments,
+            // source contents, model text or arbitrary provider strings.
+            let known = definitions.iter().find(|d| d.name == call.name);
+            let namespaced = call
+                .name
+                .strip_prefix("functions.")
+                .and_then(|name| definitions.iter().find(|d| d.name == name));
+            let label = known
+                .or(namespaced)
+                .map(|d| d.name)
+                .unwrap_or("unregistered");
+            eprintln!(
+                "Tool {label}{}: {}",
+                if known.is_none() && namespaced.is_some() {
+                    " (namespaced)"
+                } else {
+                    ""
+                },
+                if result.is_ok() {
+                    "completed"
+                } else {
+                    "rejected"
+                }
+            );
             results.push(match result {
                 Ok(text) => (redact(text, env), false),
                 Err(error) => (redact(error.to_string(), env), true),
