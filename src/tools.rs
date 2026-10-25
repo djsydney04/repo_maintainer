@@ -151,10 +151,17 @@ pub struct Tools<'a> {
 impl Tools<'_> {
     pub fn call(&mut self, name: &str, args: &Value) -> Result<String> {
         ensure!(Instant::now() < self.deadline, "Agent deadline exceeded");
-        let definition = definitions(self.config)
-            .into_iter()
-            .find(|d| d.name == name)
-            .context("Unknown source tool")?;
+        let available = definitions(self.config);
+        let definition = available.iter().find(|d| d.name == name).with_context(|| {
+            format!(
+                "Unknown source tool; choose one of: {}",
+                available
+                    .iter()
+                    .map(|d| d.name)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })?;
         let object = args
             .as_object()
             .context("Tool arguments must be an object")?;

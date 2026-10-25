@@ -113,6 +113,7 @@ fn native_request_formats_and_tool_continuations_for_all_four_providers() {
                 assert_eq!(request["reasoning_effort"], "low");
                 assert_eq!(request["max_completion_tokens"], 4096);
                 assert_eq!(request["parallel_tool_calls"], false);
+                assert_eq!(request["disable_tool_validation"], true);
             }
         }
     }
@@ -187,6 +188,49 @@ fn native_agent_reads_edits_and_repairs_real_rust_test_with_simulated_models() {
                 .contains("assert_eq!(answer(), 2)")
         );
     }
+}
+#[test]
+fn unregistered_model_tools_are_rejected_locally_and_can_be_corrected() {
+    let root = tempfile::tempdir().unwrap();
+    fs::create_dir(root.path().join("src")).unwrap();
+    fs::write(root.path().join("src/lib.rs"), "// source evidence\n").unwrap();
+    let mut transport = Fake {
+        replies: VecDeque::from([
+            reply(
+                "groq",
+                Some((
+                    "unregistered_write",
+                    json!({"path":"unexpected.txt","content":"must not be written"}),
+                )),
+                "",
+            ),
+            reply("groq", Some(("read", json!({"path":"src/lib.rs"}))), ""),
+            reply("groq", None, "Inspected the allowed source."),
+        ]),
+        requests: vec![],
+    };
+    let result = agent::run_with(
+        &config("groq"),
+        root.path(),
+        "Inspect the source",
+        &Environment::from([("SDK_MAINTENANCE_API_KEY".into(), "fixture-key".into())]),
+        false,
+        &mut transport,
+        &mut budget(3),
+    )
+    .unwrap();
+    assert_eq!(result["requests"], 3);
+    assert!(!root.path().join("unexpected.txt").exists());
+    assert!(
+        transport.requests[1]
+            .to_string()
+            .contains("Unknown source tool")
+    );
+    assert!(
+        transport.requests[2]
+            .to_string()
+            .contains("source evidence")
+    );
 }
 #[test]
 fn budgets_deadlines_context_and_incomplete_responses_stop_without_fallback() {

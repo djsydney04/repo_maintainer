@@ -60,6 +60,9 @@ pub fn request(
             }
             if !tools.is_empty() {
                 body["tools"] = json!(tools.iter().map(|t|json!({"type":"function","function":{"name":t.name,"description":t.description,"parameters":t.parameters}})).collect::<Vec<_>>());
+                // Unknown names and invalid arguments are rejected by Tools::call
+                // and returned as tool errors, so the agent can correct them.
+                body["disable_tool_validation"] = json!(true);
                 if model.starts_with("openai/gpt-oss-") {
                     body["parallel_tool_calls"] = json!(false);
                 }
