@@ -110,6 +110,8 @@ fn native_request_formats_and_tool_continuations_for_all_four_providers() {
             _ => {
                 assert_eq!(request["messages"][3]["role"], "tool");
                 assert!(request["tools"][0]["function"].is_object());
+                assert_eq!(request["reasoning_effort"], "low");
+                assert_eq!(request["max_completion_tokens"], 4096);
             }
         }
     }

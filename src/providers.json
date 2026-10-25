@@ -8,7 +8,7 @@
   "groq": {
     "key": "GROQ_API_KEY", "defaultModel": "openai/gpt-oss-120b",
     "models": ["openai/gpt-oss-120b", "qwen/qwen3.8-27b"],
-    "paid": false, "intervalMs": 61000, "contextWindow": 6000, "maxTokens": 1536,
+    "paid": false, "intervalMs": 61000, "contextWindow": 6000, "maxTokens": 4096,
     "reserveTokens": 2500, "keepRecentTokens": 1200, "maxInputChars": 18000
   },
   "openai": {
