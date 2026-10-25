@@ -112,6 +112,7 @@ fn native_request_formats_and_tool_continuations_for_all_four_providers() {
                 assert!(request["tools"][0]["function"].is_object());
                 assert_eq!(request["reasoning_effort"], "low");
                 assert_eq!(request["max_completion_tokens"], 4096);
+                assert_eq!(request["parallel_tool_calls"], false);
             }
         }
     }
@@ -271,6 +272,13 @@ fn context_compaction_is_counted_and_keeps_the_original_task() {
             if system.starts_with("Summarize") {
                 self.compacted = true;
                 assert!(body.get("tools").is_none());
+                assert_eq!(body["tool_choice"], "none");
+                let messages = body["messages"].as_array().unwrap();
+                assert_eq!(messages.len(), 2);
+                assert_eq!(messages[1]["role"], "user");
+                let transcript = messages[1]["content"].as_str().unwrap();
+                assert!(transcript.contains("tool_calls"));
+                assert!(transcript.contains("Task must survive compaction"));
                 return Ok(reply(provider, None, "Inspected src/lib.rs; no edits yet."));
             }
             if self.compacted {

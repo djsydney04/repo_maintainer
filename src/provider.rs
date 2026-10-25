@@ -60,6 +60,11 @@ pub fn request(
             }
             if !tools.is_empty() {
                 body["tools"] = json!(tools.iter().map(|t|json!({"type":"function","function":{"name":t.name,"description":t.description,"parameters":t.parameters}})).collect::<Vec<_>>());
+                if model.starts_with("openai/gpt-oss-") {
+                    body["parallel_tool_calls"] = json!(false);
+                }
+            } else {
+                body["tool_choice"] = json!("none");
             }
             body
         }

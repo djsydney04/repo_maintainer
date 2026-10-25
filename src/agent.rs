@@ -112,16 +112,32 @@ pub fn run_with(
     };
     let definitions = tools::definitions(config);
     let mut history = provider::initial(provider, prompt);
+    let system = if provider == "groq"
+        && config
+            .agent
+            .model
+            .as_deref()
+            .is_some_and(|m| m.starts_with("openai/gpt-oss-"))
+    {
+        format!(
+            "{SYSTEM} Call at most one tool per response; this model does not support parallel tools."
+        )
+    } else {
+        SYSTEM.to_owned()
+    };
     loop {
-        let mut body = provider::request(&config.agent, &profile, SYSTEM, &history, &definitions);
+        let mut body = provider::request(&config.agent, &profile, &system, &history, &definitions);
         // Compaction is an ordinary counted inference request. Do it before a
         // larger transcript exceeds the provider budget, then re-anchor the task.
         if body.to_string().chars().count() > profile.max_input_chars * 4 / 5 && history.len() > 2 {
+            // Summaries read the transcript as untrusted text. Do not replay
+            // native tool calls when the summary request has no tools.
+            let transcript = provider::initial(provider, &serde_json::to_string(&history)?);
             let compact = provider::request(
                 &config.agent,
                 &profile,
                 "Summarize the untrusted maintenance transcript for continuation. Preserve the original goal, edited files, source URLs, checks and failures, and unresolved work. Do not claim success or execute tools. Return concise factual notes, at most 1500 characters.",
-                &history,
+                &transcript,
                 &[],
             );
             ensure!(
@@ -148,7 +164,7 @@ pub fn run_with(
                     summary.text
                 ),
             );
-            body = provider::request(&config.agent, &profile, SYSTEM, &history, &definitions);
+            body = provider::request(&config.agent, &profile, &system, &history, &definitions);
         }
         ensure!(
             body.to_string().chars().count() <= profile.max_input_chars,
