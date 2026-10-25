@@ -328,7 +328,7 @@ fn context_compaction_is_counted_and_keeps_the_original_task() {
                 assert_eq!(messages[1]["role"], "user");
                 let transcript = messages[1]["content"].as_str().unwrap();
                 assert!(transcript.contains("tool_calls"));
-                assert!(transcript.contains("Task must survive compaction"));
+                assert!(!transcript.contains("Task must survive compaction"));
                 return Ok(reply(provider, None, "Inspected src/lib.rs; no edits yet."));
             }
             if self.compacted {
@@ -378,4 +378,83 @@ fn context_compaction_is_counted_and_keeps_the_original_task() {
         "{} requests remain",
         usize::from(budget.max) - transport.calls + 1
     )));
+}
+
+#[test]
+fn oversized_parallel_results_and_notes_fit_without_losing_the_original_task() {
+    struct Oversized {
+        calls: usize,
+        final_body: Value,
+    }
+    impl Transport for Oversized {
+        fn send(
+            &mut self,
+            provider: &str,
+            _: &str,
+            _: &str,
+            body: &Value,
+            _: Duration,
+        ) -> Result<Value> {
+            self.calls += 1;
+            let max = repo_maintainer::config::profiles()[provider].max_input_chars;
+            assert!(body.to_string().chars().count() <= max);
+            if body["messages"][0]["content"]
+                .as_str()
+                .unwrap()
+                .starts_with("Summarize")
+            {
+                let transcript = body["messages"][1]["content"].as_str().unwrap();
+                assert!(transcript.contains("Earlier context truncated"));
+                assert!(!transcript.contains("Original task must survive"));
+                return Ok(reply(
+                    provider,
+                    None,
+                    &json!({"notes":"n".repeat(3800)}).to_string(),
+                ));
+            }
+            if self.calls == 1 {
+                return Ok(json!({"choices":[{"finish_reason":"tool_calls","message":{
+                    "role":"assistant","content":null,
+                    "tool_calls":(0..5).map(|i| json!({"id":format!("read_{i}"),"type":"function","function":{
+                        "name":"read","arguments":json!({"path":"src/lib.rs","limit":400}).to_string()
+                    }})).collect::<Vec<_>>()
+                }}]}));
+            }
+            self.final_body = body.clone();
+            Ok(reply(provider, None, "Completed a scoped assessment."))
+        }
+    }
+    let root = tempfile::tempdir().unwrap();
+    fs::create_dir(root.path().join("src")).unwrap();
+    fs::write(
+        root.path().join("src/lib.rs"),
+        "// source evidence\n".repeat(400),
+    )
+    .unwrap();
+    let prompt = format!("Original task must survive: {}", "x".repeat(12_500));
+    let mut transport = Oversized {
+        calls: 0,
+        final_body: Value::Null,
+    };
+    let mut config = config("groq");
+    config.agent.model = Some("qwen/qwen3.8-27b".into());
+    let mut budget = budget(4);
+    agent::run_with(
+        &config,
+        root.path(),
+        &prompt,
+        &Environment::from([("SDK_MAINTENANCE_API_KEY".into(), "fixture-key".into())]),
+        false,
+        &mut transport,
+        &mut budget,
+    )
+    .unwrap();
+    assert_eq!(transport.calls, 3);
+    assert_eq!(budget.used, 3);
+    let resumed = transport.final_body["messages"][1]["content"]
+        .as_str()
+        .unwrap();
+    assert!(resumed.starts_with(&prompt));
+    assert!(resumed.contains("Continuation notes"));
+    assert!(resumed.contains("Earlier context truncated"));
 }
