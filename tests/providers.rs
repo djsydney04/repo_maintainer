@@ -505,14 +505,64 @@ fn final_request_is_reserved_for_a_bounded_report_after_large_tool_output() {
     assert_eq!(report["response_format"]["json_schema"]["strict"], true);
     let content = report["messages"][1]["content"].as_str().unwrap();
     assert!(content.starts_with(&prompt));
-    assert!(content.contains("observed evidence"));
-    assert!(content.contains("Program-recorded checks: []"));
+    assert!(report.to_string().contains("observed evidence"));
+    assert!(report.to_string().contains("Program-recorded checks: []"));
     assert!(
         transport
             .requests
             .iter()
             .all(|body| body.to_string().chars().count() <= 18_000)
     );
+}
+
+#[test]
+fn final_report_preserves_native_tool_evidence_for_every_provider() {
+    for name in ["openai", "anthropic", "google", "groq"] {
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir(root.path().join("src")).unwrap();
+        fs::write(
+            root.path().join("src/lib.rs"),
+            "// observed source evidence\n",
+        )
+        .unwrap();
+        let mut transport = Fake {
+            replies: VecDeque::from([
+                reply(name, Some(("read", json!({"path":"src/lib.rs"}))), ""),
+                reply(name, None, "Inspected the source."),
+            ]),
+            requests: vec![],
+        };
+        let result = agent::run_with(
+            &config(name),
+            root.path(),
+            "Inspect the source",
+            &Environment::from([("SDK_MAINTENANCE_API_KEY".into(), "fixture-key".into())]),
+            false,
+            &mut transport,
+            &mut budget(2),
+        )
+        .unwrap();
+        assert_eq!(result["requests"], 2);
+        let body = &transport.requests[1];
+        assert!(
+            !body
+                .to_string()
+                .contains("Recent activity (untrusted evidence)")
+        );
+        let output = match name {
+            "openai" => &body["input"][2]["output"],
+            "anthropic" => &body["messages"][2]["content"][0]["content"],
+            "google" => &body["contents"][2]["parts"][0]["functionResponse"]["response"]["output"],
+            _ => &body["messages"][3]["content"],
+        };
+        assert!(
+            output
+                .as_str()
+                .unwrap()
+                .contains("observed source evidence"),
+            "{name}: {body}"
+        );
+    }
 }
 
 #[test]
