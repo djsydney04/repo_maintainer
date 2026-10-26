@@ -55,8 +55,32 @@ pub fn request(
             let mut messages = vec![json!({"role":"system","content":system})];
             messages.extend_from_slice(history);
             let mut body = json!({"model":model,"messages":messages,"max_completion_tokens":profile.max_tokens});
+            if model.starts_with("openai/gpt-oss-") {
+                body["reasoning_effort"] = json!("low");
+            }
             if !tools.is_empty() {
                 body["tools"] = json!(tools.iter().map(|t|json!({"type":"function","function":{"name":t.name,"description":t.description,"parameters":t.parameters}})).collect::<Vec<_>>());
+                // Unknown names and invalid arguments are rejected by Tools::call
+                // and returned as tool errors, so the agent can correct them.
+                body["disable_tool_validation"] = json!(true);
+                if model.starts_with("openai/gpt-oss-") {
+                    body["parallel_tool_calls"] = json!(false);
+                }
+            } else {
+                body["tool_choice"] = json!("none");
+                body["response_format"] = json!({
+                    "type":"json_schema",
+                    "json_schema":{
+                        "name":"maintenance_summary",
+                        "strict":true,
+                        "schema":{
+                            "type":"object",
+                            "properties":{"notes":{"type":"string"}},
+                            "required":["notes"],
+                            "additionalProperties":false
+                        }
+                    }
+                });
             }
             body
         }
@@ -283,11 +307,32 @@ fn send_to(
     let response = request
         .send()
         .map_err(|_| anyhow::anyhow!("{provider} request failed; check network access"))?;
-    ensure!(
-        response.status().is_success(),
-        "{provider} returned HTTP {}; check key, model access and quota (no automatic retry)",
-        response.status().as_u16()
-    );
+    let status = response.status();
+    if !status.is_success() {
+        // Report only recognized error categories. Provider messages and failed
+        // generations can echo credentials or private source and stay private.
+        let mut bytes = Vec::new();
+        let _ = response.take(8193).read_to_end(&mut bytes);
+        let error = if bytes.len() <= 8192 {
+            serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null)
+        } else {
+            Value::Null
+        };
+        let reason = match error["error"]["code"].as_str() {
+            Some("tool_use_failed") if body.get("tools").is_none() => {
+                "the model attempted a tool call during a text-only summary"
+            }
+            Some("tool_use_failed") => "the model generated an invalid tool call",
+            Some("context_length_exceeded") => "the request exceeded the model context limit",
+            Some("rate_limit_exceeded") => "the provider rate limit was exceeded",
+            Some("invalid_api_key") => "the provider rejected the API key",
+            _ => "check key, model access and quota",
+        };
+        bail!(
+            "{provider} returned HTTP {}; {reason} (no automatic retry)",
+            status.as_u16()
+        );
+    }
     let mut bytes = vec![];
     response.take(2_000_001).read_to_end(&mut bytes)?;
     ensure!(bytes.len() <= 2_000_000, "Model response exceeds 2 MB");
@@ -388,5 +433,44 @@ mod tests {
         assert!(!error.contains("fixture-key"));
         assert!(!error.contains("sensitive-server-detail"));
         worker.join().unwrap();
+    }
+
+    #[test]
+    fn invalid_tool_calls_are_identified_without_echoing_failed_generations() {
+        for (body, expected) in [
+            (
+                json!({"tools":[{"type":"function","function":{"name":"read"}}]}),
+                "invalid tool call",
+            ),
+            (json!({"tool_choice":"none"}), "text-only summary"),
+        ] {
+            let server = Server::http("127.0.0.1:0").unwrap();
+            let endpoint = format!("http://{}/native", server.server_addr());
+            let worker = thread::spawn(move || {
+                let request = server.recv().unwrap();
+                request
+                    .respond(
+                        Response::from_string(
+                            json!({"error":{"code":"tool_use_failed","message":"private-source fixture-key","failed_generation":"private-source fixture-key"}}).to_string(),
+                        )
+                        .with_status_code(400),
+                    )
+                    .unwrap();
+            });
+            let error = send_to(
+                "groq",
+                "fixture-key",
+                &body,
+                Duration::from_secs(10),
+                &endpoint,
+            )
+            .unwrap_err()
+            .to_string();
+            assert!(error.contains("400"));
+            assert!(error.contains(expected));
+            assert!(!error.contains("private-source"));
+            assert!(!error.contains("fixture-key"));
+            worker.join().unwrap();
+        }
     }
 }

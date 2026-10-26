@@ -79,7 +79,7 @@ pub fn add(config: &Config, mut brief: String) -> Result<String> {
         ));
         brief.push_str(&head(
             &fetch(config, url, Duration::from_secs(45))?,
-            if config.agent.provider == "groq" {
+            if matches!(config.agent.provider.as_str(), "groq" | "google") {
                 800
             } else {
                 18_000

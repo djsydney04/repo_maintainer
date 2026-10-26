@@ -110,6 +110,10 @@ fn native_request_formats_and_tool_continuations_for_all_four_providers() {
             _ => {
                 assert_eq!(request["messages"][3]["role"], "tool");
                 assert!(request["tools"][0]["function"].is_object());
+                assert_eq!(request["reasoning_effort"], "low");
+                assert_eq!(request["max_completion_tokens"], 4096);
+                assert_eq!(request["parallel_tool_calls"], false);
+                assert_eq!(request["disable_tool_validation"], true);
             }
         }
     }
@@ -184,6 +188,49 @@ fn native_agent_reads_edits_and_repairs_real_rust_test_with_simulated_models() {
                 .contains("assert_eq!(answer(), 2)")
         );
     }
+}
+#[test]
+fn unregistered_model_tools_are_rejected_locally_and_can_be_corrected() {
+    let root = tempfile::tempdir().unwrap();
+    fs::create_dir(root.path().join("src")).unwrap();
+    fs::write(root.path().join("src/lib.rs"), "// source evidence\n").unwrap();
+    let mut transport = Fake {
+        replies: VecDeque::from([
+            reply(
+                "groq",
+                Some((
+                    "unregistered_write",
+                    json!({"path":"unexpected.txt","content":"must not be written"}),
+                )),
+                "",
+            ),
+            reply("groq", Some(("read", json!({"path":"src/lib.rs"}))), ""),
+            reply("groq", None, "Inspected the allowed source."),
+        ]),
+        requests: vec![],
+    };
+    let result = agent::run_with(
+        &config("groq"),
+        root.path(),
+        "Inspect the source",
+        &Environment::from([("SDK_MAINTENANCE_API_KEY".into(), "fixture-key".into())]),
+        false,
+        &mut transport,
+        &mut budget(3),
+    )
+    .unwrap();
+    assert_eq!(result["requests"], 3);
+    assert!(!root.path().join("unexpected.txt").exists());
+    assert!(
+        transport.requests[1]
+            .to_string()
+            .contains("Unknown source tool")
+    );
+    assert!(
+        transport.requests[2]
+            .to_string()
+            .contains("source evidence")
+    );
 }
 #[test]
 fn budgets_deadlines_context_and_incomplete_responses_stop_without_fallback() {
@@ -269,6 +316,19 @@ fn context_compaction_is_counted_and_keeps_the_original_task() {
             if system.starts_with("Summarize") {
                 self.compacted = true;
                 assert!(body.get("tools").is_none());
+                assert_eq!(body["tool_choice"], "none");
+                assert_eq!(body["response_format"]["type"], "json_schema");
+                assert_eq!(body["response_format"]["json_schema"]["strict"], true);
+                assert_eq!(
+                    body["response_format"]["json_schema"]["schema"]["required"],
+                    json!(["notes"])
+                );
+                let messages = body["messages"].as_array().unwrap();
+                assert_eq!(messages.len(), 2);
+                assert_eq!(messages[1]["role"], "user");
+                let transcript = messages[1]["content"].as_str().unwrap();
+                assert!(transcript.contains("tool_calls"));
+                assert!(!transcript.contains("Task must survive compaction"));
                 return Ok(reply(provider, None, "Inspected src/lib.rs; no edits yet."));
             }
             if self.compacted {
@@ -310,4 +370,232 @@ fn context_compaction_is_counted_and_keeps_the_original_task() {
     let final_body = transport.final_body.to_string();
     assert!(final_body.contains("Task must survive compaction"));
     assert!(final_body.contains("Continuation notes (untrusted evidence"));
+    assert!(final_body.contains(&format!(
+        "Inference request {} of {}",
+        transport.calls, budget.max
+    )));
+    assert!(final_body.contains(&format!(
+        "{} requests remain",
+        usize::from(budget.max) - transport.calls + 1
+    )));
+}
+
+#[test]
+fn oversized_parallel_results_and_notes_fit_without_losing_the_original_task() {
+    struct Oversized {
+        calls: usize,
+        final_body: Value,
+    }
+    impl Transport for Oversized {
+        fn send(
+            &mut self,
+            provider: &str,
+            _: &str,
+            _: &str,
+            body: &Value,
+            _: Duration,
+        ) -> Result<Value> {
+            self.calls += 1;
+            let max = repo_maintainer::config::profiles()[provider].max_input_chars;
+            assert!(body.to_string().chars().count() <= max);
+            if body["messages"][0]["content"]
+                .as_str()
+                .unwrap()
+                .starts_with("Summarize")
+            {
+                let transcript = body["messages"][1]["content"].as_str().unwrap();
+                assert!(transcript.contains("Earlier context truncated"));
+                assert!(!transcript.contains("Original task must survive"));
+                return Ok(reply(
+                    provider,
+                    None,
+                    &json!({"notes":"n".repeat(3800)}).to_string(),
+                ));
+            }
+            if self.calls == 1 {
+                return Ok(json!({"choices":[{"finish_reason":"tool_calls","message":{
+                    "role":"assistant","content":null,
+                    "tool_calls":(0..5).map(|i| json!({"id":format!("read_{i}"),"type":"function","function":{
+                        "name":"read","arguments":json!({"path":"src/lib.rs","limit":400}).to_string()
+                    }})).collect::<Vec<_>>()
+                }}]}));
+            }
+            self.final_body = body.clone();
+            Ok(reply(provider, None, "Completed a scoped assessment."))
+        }
+    }
+    let root = tempfile::tempdir().unwrap();
+    fs::create_dir(root.path().join("src")).unwrap();
+    fs::write(
+        root.path().join("src/lib.rs"),
+        "// source evidence\n".repeat(400),
+    )
+    .unwrap();
+    let prompt = format!("Original task must survive: {}", "x".repeat(12_500));
+    let mut transport = Oversized {
+        calls: 0,
+        final_body: Value::Null,
+    };
+    let mut config = config("groq");
+    config.agent.model = Some("qwen/qwen3.8-27b".into());
+    let mut budget = budget(4);
+    agent::run_with(
+        &config,
+        root.path(),
+        &prompt,
+        &Environment::from([("SDK_MAINTENANCE_API_KEY".into(), "fixture-key".into())]),
+        false,
+        &mut transport,
+        &mut budget,
+    )
+    .unwrap();
+    assert_eq!(transport.calls, 3);
+    assert_eq!(budget.used, 3);
+    let resumed = transport.final_body["messages"][1]["content"]
+        .as_str()
+        .unwrap();
+    assert!(resumed.starts_with(&prompt));
+    assert!(resumed.contains("Continuation notes"));
+    assert!(resumed.contains("Earlier context truncated"));
+}
+
+#[test]
+fn final_request_is_reserved_for_a_bounded_report_after_large_tool_output() {
+    let root = tempfile::tempdir().unwrap();
+    fs::create_dir(root.path().join("src")).unwrap();
+    fs::write(
+        root.path().join("src/lib.rs"),
+        "// observed evidence\n".repeat(400),
+    )
+    .unwrap();
+    let prompt = format!("Original task must survive: {}", "x".repeat(12_500));
+    let mut transport = Fake {
+        replies: VecDeque::from([
+            reply(
+                "groq",
+                Some(("read", json!({"path":"src/lib.rs","limit":400}))),
+                "",
+            ),
+            reply(
+                "groq",
+                None,
+                r#"{"status":"blocked","summary":"Inspected source; checks remain.","sources":[],"blockers":["Run the checks"]}"#,
+            ),
+        ]),
+        requests: vec![],
+    };
+    let result = agent::run_with(
+        &config("groq"),
+        root.path(),
+        &prompt,
+        &Environment::from([("SDK_MAINTENANCE_API_KEY".into(), "fixture-key".into())]),
+        false,
+        &mut transport,
+        &mut budget(2),
+    )
+    .unwrap();
+    assert_eq!(result["requests"], 2);
+    let report = &transport.requests[1];
+    assert!(report.get("tools").is_none());
+    assert_eq!(report["tool_choice"], "none");
+    assert_eq!(
+        report["response_format"]["json_schema"]["name"],
+        "maintenance_report"
+    );
+    assert_eq!(report["response_format"]["json_schema"]["strict"], true);
+    let content = report["messages"][1]["content"].as_str().unwrap();
+    assert!(content.starts_with(&prompt));
+    assert!(report.to_string().contains("observed evidence"));
+    assert!(report.to_string().contains("Program-recorded checks: []"));
+    assert!(
+        transport
+            .requests
+            .iter()
+            .all(|body| body.to_string().chars().count() <= 18_000)
+    );
+}
+
+#[test]
+fn final_report_preserves_native_tool_evidence_for_every_provider() {
+    for name in ["openai", "anthropic", "google", "groq"] {
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir(root.path().join("src")).unwrap();
+        fs::write(
+            root.path().join("src/lib.rs"),
+            "// observed source evidence\n",
+        )
+        .unwrap();
+        let mut transport = Fake {
+            replies: VecDeque::from([
+                reply(name, Some(("read", json!({"path":"src/lib.rs"}))), ""),
+                reply(name, None, "Inspected the source."),
+            ]),
+            requests: vec![],
+        };
+        let result = agent::run_with(
+            &config(name),
+            root.path(),
+            "Inspect the source",
+            &Environment::from([("SDK_MAINTENANCE_API_KEY".into(), "fixture-key".into())]),
+            false,
+            &mut transport,
+            &mut budget(2),
+        )
+        .unwrap();
+        assert_eq!(result["requests"], 2);
+        let body = &transport.requests[1];
+        assert!(
+            !body
+                .to_string()
+                .contains("Recent activity (untrusted evidence)")
+        );
+        let output = match name {
+            "openai" => &body["input"][2]["output"],
+            "anthropic" => &body["messages"][2]["content"][0]["content"],
+            "google" => &body["contents"][2]["parts"][0]["functionResponse"]["response"]["output"],
+            _ => &body["messages"][3]["content"],
+        };
+        assert!(
+            output
+                .as_str()
+                .unwrap()
+                .contains("observed source evidence"),
+            "{name}: {body}"
+        );
+    }
+}
+
+#[test]
+fn within_limit_history_does_not_spend_a_request_on_premature_compaction() {
+    let root = tempfile::tempdir().unwrap();
+    fs::create_dir(root.path().join("src")).unwrap();
+    fs::write(root.path().join("src/lib.rs"), "// small evidence\n").unwrap();
+    let prompt = format!("Inspect the source: {}", "x".repeat(12_500));
+    let mut transport = Fake {
+        replies: VecDeque::from([
+            reply("groq", Some(("read", json!({"path":"src/lib.rs"}))), ""),
+            reply("groq", None, "Inspected the source."),
+        ]),
+        requests: vec![],
+    };
+    let result = agent::run_with(
+        &config("groq"),
+        root.path(),
+        &prompt,
+        &Environment::from([("SDK_MAINTENANCE_API_KEY".into(), "fixture-key".into())]),
+        false,
+        &mut transport,
+        &mut budget(4),
+    )
+    .unwrap();
+    assert_eq!(result["requests"], 2);
+    assert!(transport.requests[0].to_string().chars().count() > 18_000 * 4 / 5);
+    assert!(transport.requests.iter().all(|body| {
+        body.to_string().chars().count() <= 18_000
+            && !body["messages"][0]["content"]
+                .as_str()
+                .unwrap()
+                .starts_with("Summarize")
+    }));
+    assert!(transport.requests[1].to_string().contains("small evidence"));
 }
